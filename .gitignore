@@ -1,0 +1,13 @@
+node_modules
+dist
+out
+models/*.gguf
+models/active.json
+config/prompt.txt
+config/settings.json
+bin/llama-server*
+bin/*.dll
+bin/MicrosoftEdgeWebview2Setup.exe
+.env
+.DS_Store
+Thumbs.db

@@ -1,0 +1,56 @@
+{
+  "name": "ideogram4-dataset-editor",
+  "version": "0.1.0",
+  "description": "Ideogram 4 Dataset Editor — portable Windows app with local AI captioning (Huihui-Qwen3-VL-4B + llama.cpp)",
+  "main": "electron/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "electron:dev": "concurrently --kill-others --names \"vite,electron\" \"vite\" \"wait-on --timeout 30000 http://localhost:5173 && electron .\"",
+    "electron": "electron .",
+    "dist": "vite build && electron-builder --win dir --x64",
+    "dist:zip": "vite build && electron-builder --win dir --x64 && npm run package:zip",
+    "package:zip": "node scripts/package-zip.js"
+  },
+  "dependencies": {
+    "sharp": "^0.33.4"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "vite": "^6.0.5",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.ideogram4.editor",
+    "productName": "Ideogram4Editor",
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json",
+      "prompts/**/*",
+      "config/**/*",
+      "models/.gitkeep",
+      "bin/**/*"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "out"
+    },
+    "asar": false,
+    "win": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "forceCodeSigning": false
+    }
+  }
+}
