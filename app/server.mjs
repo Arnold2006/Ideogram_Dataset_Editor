@@ -1,4 +1,4 @@
-// FrameForge — local Ideogram 4 JSON prompt generator (Portable Dataset Editor build)
+// Ideogram4 Dataset Editor — portable dataset editor
 // Spawns llama-server (app/bin/) as subprocess with --mmproj for vision, then proxies OpenAI-compatible API.
 // UI is a dataset editor: 3-column image grid on left, prompt editor on right. No chat.
 
@@ -580,7 +580,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`FrameForge running at http://${HOST}:${PORT}`);
+  console.log(`Ideogram4 Dataset Editor running at http://${HOST}:${PORT}`);
   // Try to open browser on Windows portable launch (non-blocking)
   if (process.env.FF_AUTO_OPEN !== "0") {
     // Don't auto-open when running under Pinokio or tests

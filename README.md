@@ -1,4 +1,4 @@
-# FrameForge — Portable Dataset Editor
+# Ideogram4 Dataset Editor
 
 Dataset editor for Ideogram 4 prompts. Runs as a **Windows Portable App** — no installer, no Pinokio, no admin rights.
 
@@ -6,7 +6,7 @@ Left: 3-column grid of every image in a folder. Right: editor for the generated 
 
 ![screenshot.png](screenshot.png)
 
-> Based on [FrameForge](https://github.com/Arnold2006/FrameForge) — chat removed, UI refactored to dataset-editor layout, portable launchers added.
+Dataset editor for Ideogram 4 — portable, no install required.
 
 ---
 
@@ -14,7 +14,7 @@ Left: 3-column grid of every image in a folder. Right: editor for the generated 
 
 - **Folder → grid**: paste a Windows path like `C:\Datasets\my-images` and every `.jpg/.png/.webp/.bmp/.gif` appears in a 3-column grid on the left.
 - **Caption sidecars**: each image can have a sidecar prompt next to it — `.json` for Ideogram 4 structured prompts, `.txt` for plain/MiniMax. Green badge = has caption, grey = missing.
-- **Prompt generation** (optional, local): uses a local vision-language model (Huihui-Qwen3-VL-4B via `llama-server` CUDA 12.4) with grammar-constrained JSON, normalization, and AJV validation — same pipeline as original FrameForge.
+- **Prompt generation** (optional, local): uses a local vision-language model (Huihui-Qwen3-VL-4B via `llama-server` CUDA 12.4) with grammar-constrained JSON, normalization, and AJV validation.
 - **Editor on the right**: click an image → its prompt loadseditable. Save writes the sidecar file in place, Copy copies to clipboard, Generate creates a new prompt from the image. Ideogram mode includes the drag-to-move / resize bbox canvas.
 - **No install**: extract the folder, double-click `run.bat`. If Node.js is on PATH it just works; otherwise drop a portable `node.exe` at `app\node\node.exe` and it still works offline. Generation works even without a model — you can still browse and edit existing captions.
 
@@ -143,5 +143,4 @@ Ideogram_Dataset_Editor/   ← root (portable app)
 
 ## Notes
 
-- Chat removed per spec — the UI and `/api/chat` + web-search code have been stripped.
-- Original Pinokio one-click install still present but not required for portable use.
+- Runs entirely locally — no cloud, no install.

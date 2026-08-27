@@ -2,7 +2,7 @@
   "name": "ideoprompt",
   "version": "1.0.0",
   "private": true,
-  "description": "FrameForge Portable — Windows dataset editor with 3-column grid and prompt editor (Ideogram 4 JSON / plain / MiniMax). No install required.",
+  "description": "Ideogram4 Dataset Editor — portable, 3-column grid and prompt editor (Ideogram 4 JSON / plain / MiniMax). No install required.",
   "type": "module",
   "main": "server.mjs",
   "scripts": {
