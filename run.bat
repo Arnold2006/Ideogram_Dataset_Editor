@@ -42,9 +42,27 @@ if not exist "%NODE_EXE%" (
   )
   
   rem Move contents from node-v20.18.0-win-x64 subfolder up to node dir
+  echo Checking extracted structure...
+  dir /b "%NODE_DIR%"
   for /d %%d in ("%NODE_DIR%\node-v*-win-x64") do (
-    robocopy "%%d" "%NODE_DIR%" /E /MOVE >nul
-    rmdir /s /q "%%d"
+    echo Found subfolder: %%d
+    robocopy "%%d" "%NODE_DIR%" /E /MOVE
+    if errorlevel 8 (
+      echo robocopy failed with error %errorlevel%
+    ) else (
+      rmdir /s /q "%%d"
+    )
+  )
+  if not exist "%NODE_EXE%" (
+    echo Searching for node.exe in extracted folders...
+    for /r "%NODE_DIR%" %%f in (node.exe) do (
+      echo Found node.exe at: %%f
+      set "FOUND_NODE=%%f"
+    )
+    if defined FOUND_NODE (
+      echo Copying found node.exe to %NODE_EXE%
+      copy "%FOUND_NODE%" "%NODE_EXE%"
+    )
   )
   
   if exist "%ZIP%" del "%ZIP%"
