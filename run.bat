@@ -52,7 +52,8 @@ set "PORT=8123"
 echo [Ideogram4 Dataset Editor] Starting on http://127.0.0.1:%PORT% ...
 echo [Ideogram4 Dataset Editor] Keep this window open. Close to stop.
 echo.
-start "" cmd /c "timeout /t 2 /nobreak >nul & start http://127.0.0.1:%PORT%"
+timeout /t 2 /nobreak >nul
+start "" http://127.0.0.1:%PORT%
 pushd "%APP%"
 "%NODE_EXE%" server.mjs
 popd
