@@ -53,17 +53,6 @@ if not exist "%NODE_EXE%" (
       rmdir /s /q "%%d"
     )
   )
-  if not exist "%NODE_EXE%" (
-    echo Searching for node.exe in extracted folders...
-    for /r "%NODE_DIR%" %%f in (node.exe) do (
-      echo Found node.exe at: %%f
-      set "FOUND_NODE=%%f"
-    )
-    if defined FOUND_NODE (
-      echo Copying found node.exe to %NODE_EXE%
-      copy "%FOUND_NODE%" "%NODE_EXE%"
-    )
-  )
   
   if exist "%ZIP%" del "%ZIP%"
   echo Node.js installed to %NODE_DIR%
