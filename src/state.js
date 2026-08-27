@@ -5,6 +5,8 @@ export function createAppState(){
     current: 0,
     modified: new Set(),
     photoArtMode: {},
-    selectedIdx: null
+    selectedIdx: null,
+    generatingIdx: null,
+    batchProgress: null
   };
 }

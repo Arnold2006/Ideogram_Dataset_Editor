@@ -14,6 +14,11 @@
       <span id="save-indicator">✓ Saved</span>
       <div id="progress-wrap" style="display:none"><div id="progress-bar"></div></div>
       <span id="counter" style="display:none"></span>
+      <span id="gen-indicator" style="display:none;align-items:center;gap:6px;background:#1D9E75;color:white;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600">
+        <span class="gen-spinner" style="width:12px;height:12px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;display:inline-block;animation:gen-spin 0.8s linear infinite"></span>
+        <span id="gen-indicator-text">Generating…</span>
+        <button class="tbar-btn" id="gen-cancel-top" style="padding:2px 8px;font-size:11px;background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:white">Cancel</button>
+      </span>
       <span id="nav-btns" style="display:none;gap:4px;align-items:center">
         <button class="tbar-btn" id="btn-prev" disabled>‹</button>
         <button class="tbar-btn" id="btn-next" disabled>›</button>

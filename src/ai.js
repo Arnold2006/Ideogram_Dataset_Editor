@@ -7,25 +7,67 @@ export function initAI(state){
   const aiBar = document.getElementById('ai-bar');
   const aiText = document.getElementById('ai-progress-text');
   const aiStatus = document.getElementById('ai-status');
+  const genIndicator = document.getElementById('gen-indicator');
+  const genIndicatorText = document.getElementById('gen-indicator-text');
+  const genCancelTop = document.getElementById('gen-cancel-top');
+  const leftStatus = document.getElementById('left-status');
 
   let running=false;
   let abort=false;
 
   btnGen.addEventListener('click', ()=> generateOne(state.current));
   btnGenAll.addEventListener('click', generateAll);
-  btnCancel.addEventListener('click', async ()=>{
+  function onCancel(){
     abort=true;
-    try{ await window.api.cancelGenerate(); }catch{}
+    try{ window.api.cancelGenerate(); }catch{}
     hideProgress('Cancelled');
-  });
+    setGlobalProgress(false);
+    state.generatingIdx=null;
+    state.batchProgress=null;
+    window.__renderGrid && window.__renderGrid();
+  }
+  btnCancel.addEventListener('click', onCancel);
+  if(genCancelTop) genCancelTop.addEventListener('click', onCancel);
+
+  function setGlobalProgress(active, text, pct){
+    if(genIndicator){
+      if(active){
+        genIndicator.style.display='flex';
+        if(text) genIndicatorText.textContent = pct!=null ? `${text} — ${pct}%` : text;
+      } else {
+        genIndicator.style.display='none';
+      }
+    }
+    if(leftStatus){
+      if(active && text){
+        leftStatus.style.display='block';
+        leftStatus.textContent = pct!=null ? `🤖 ${text} — ${pct}%` : `🤖 ${text}`;
+        leftStatus.style.color='#1D9E75';
+        leftStatus.style.fontWeight='600';
+      } else if(!active){
+        // restore default left status after delay
+        setTimeout(()=>{
+          if(!running && leftStatus){
+            leftStatus.textContent = `${state.dataset.length} images · click thumbnail to edit · unsaved = blue dot`;
+            leftStatus.style.color='';
+            leftStatus.style.fontWeight='';
+          }
+        }, 2000);
+      }
+    }
+    window.__renderGrid && window.__renderGrid();
+  }
 
   async function generateOne(idx){
     if(running) return;
     const entry = state.dataset[idx];
     if(!entry){ showError('No image selected'); return; }
     running=true; abort=false;
+    state.generatingIdx=idx;
     showProgress(`Generating for ${entry.base}…`, 0);
+    setGlobalProgress(true, `Generating ${entry.base}…`);
     btnGen.disabled=true; btnGenAll.disabled=true; btnCancel.style.display='inline-block'; hideError();
+    window.__renderGrid && window.__renderGrid();
     try{
       const json = await window.api.generateOne({ imagePath: entry.imgPath, folder: state.folder, base: entry.base });
       // populate as draft — do not auto-save
@@ -44,12 +86,17 @@ export function initAI(state){
         window.__renderGrid && window.__renderGrid();
       }
       showProgress(`Done — review & Save`, 100);
+      setGlobalProgress(false);
       setTimeout(hideProgress, 2000);
     }catch(e){
       showError(e.message||String(e));
       showProgress('Failed', 0);
+      setGlobalProgress(false);
     } finally {
-      running=false; btnGen.disabled=false; btnGenAll.disabled=false; btnCancel.style.display='none';
+      running=false; state.generatingIdx=null;
+      btnGen.disabled=false; btnGenAll.disabled=false; btnCancel.style.display='none';
+      setGlobalProgress(false);
+      window.__renderGrid && window.__renderGrid();
     }
   }
 
@@ -63,13 +110,20 @@ export function initAI(state){
     if(!todo.length){ aiStatus.textContent='Nothing to generate (all have content or are drafts).'; setTimeout(()=> aiStatus.textContent='',3000); return; }
     if(!confirm(`Generate for ${todo.length} unprocessed images? This will call the local model ${todo.length} times and may take minutes.`)) return;
     running=true; abort=false;
+    state.batchProgress={current:0,total:todo.length};
     btnGen.disabled=true; btnGenAll.disabled=true; btnCancel.style.display='inline-block'; hideError();
+    setGlobalProgress(true, `Batch 0/${todo.length}…`);
     let ok=0, fail=0;
     for(let k=0;k<todo.length;k++){
       if(abort) break;
       const {d,i}=todo[k];
-      showProgress(`Generating ${k+1}/${todo.length}: ${d.base}`, Math.round(((k)/todo.length)*100));
+      state.generatingIdx=i;
+      state.batchProgress.current=k+1;
+      const pct=Math.round((k/todo.length)*100);
+      showProgress(`Generating ${k+1}/${todo.length}: ${d.base}`, pct);
+      setGlobalProgress(true, `Generating ${k+1}/${todo.length}: ${d.base}`, pct);
       aiText.textContent = `${k+1}/${todo.length} — ${ok} ok ${fail?`, ${fail} failed`:''}`;
+      window.__renderGrid && window.__renderGrid();
       try{
         const json = await window.api.generateOne({ imagePath: d.imgPath, folder: state.folder, base: d.base });
         json._meta={generatedAt:new Date().toISOString()};
@@ -86,8 +140,11 @@ export function initAI(state){
       // small pause to allow UI
       await new Promise(r=> setTimeout(r, 80));
     }
-    running=false; btnGen.disabled=false; btnGenAll.disabled=false; btnCancel.style.display='none';
+    running=false; state.generatingIdx=null; state.batchProgress=null;
+    btnGen.disabled=false; btnGenAll.disabled=false; btnCancel.style.display='none';
+    setGlobalProgress(false);
     showProgress(`Batch done — ${ok} ok, ${fail} failed. Review & Save all.`, 100);
+    setTimeout(()=>hideProgress(), 2500);
     window.__renderGrid && window.__renderGrid();
     if(fail) aiError.style.display='block';
   }

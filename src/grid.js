@@ -15,8 +15,11 @@ export function initGrid(state, { onSelect, saveCurrentIfDirty }){
       const badge = statusBadge(status);
       const thumbUrl = thumbs[d.imgPath] || '';
       const sel = i===state.current ? ' selected' : '';
-      return `<div class="thumb${sel}" data-idx="${i}" title="${esc(d.imgName)}">
+      const genClass = status==='generating' ? ' generating' : '';
+      const genOverlay = status==='generating' ? `<div class="thumb-generating-badge"><span class="thumb-generating-spinner"></span>generating…</div>` : '';
+      return `<div class="thumb${sel}${genClass}" data-idx="${i}" title="${esc(d.imgName)}">
         ${thumbUrl ? `<img src="${thumbUrl}" alt="" loading="lazy">` : `<div style="position:absolute;inset:0;background:#1e222b"></div>`}
+        ${genOverlay}
         <div class="thumb-badges">${badge}</div>
         <span class="thumb-status ${statusClass(status)}" title="${status}"></span>
         <div class="thumb-footer">${esc(d.base)}</div>
@@ -35,10 +38,10 @@ export function initGrid(state, { onSelect, saveCurrentIfDirty }){
   }
 
   function computeStatus(entry, idx, st){
+    if(st.generatingIdx===idx) return 'generating';
     if(st.modified.has(idx)) return 'edited';
     if(entry._aiDraft) return 'ai-draft';
     if(entry._hasJson){
-      // check if json has content (not empty)
       const d=entry.data||{};
       const hasContent = !!(d.high_level_description || (d.style_description&&Object.keys(d.style_description).length) || (d.compositional_deconstruction&&d.compositional_deconstruction.elements&&d.compositional_deconstruction.elements.length));
       return hasContent ? 'saved' : 'empty';
@@ -46,12 +49,14 @@ export function initGrid(state, { onSelect, saveCurrentIfDirty }){
     return 'empty';
   }
   function statusBadge(s){
+    if(s==='generating') return `<span class="badge" style="background:#1D9E75;color:white">generating…</span>`;
     if(s==='edited') return `<span class="badge badge-blue">unsaved</span>`;
     if(s==='ai-draft') return `<span class="badge badge-amber">AI draft</span>`;
     if(s==='saved') return `<span class="badge badge-green">saved</span>`;
     return `<span class="badge badge-gray">empty</span>`;
   }
   function statusClass(s){
+    if(s==='generating') return 'ai';
     if(s==='edited') return 'edited';
     if(s==='ai-draft') return 'ai';
     if(s==='saved') return 'saved';
