@@ -63,11 +63,21 @@ if not exist "%APP%\node_modules" (
   echo [Ideogram4 Dataset Editor] Installing dependencies (first run)...
   pushd "%APP%"
   if exist "%APP%\node\node_modules\npm\bin\npm-cli.js" (
+    echo [Ideogram4 Dataset Editor] Found npm at node_modules/npm/bin/npm-cli.js
     "%NODE_EXE%" "%APP%\node\node_modules\npm\bin\npm-cli.js" install
   ) else if exist "%APP%\node\npm\bin\npm-cli.js" (
+    echo [Ideogram4 Dataset Editor] Found npm at npm/bin/npm-cli.js
     "%NODE_EXE%" "%APP%\node\npm\bin\npm-cli.js" install
   ) else (
-    echo [Ideogram4 Dataset Editor] Portable npm not found.
+    echo [Ideogram4 Dataset Editor] Portable npm not found at either location.
+    echo Checked: %APP%\node\node_modules\npm\bin\npm-cli.js
+    echo Checked: %APP%\node\npm\bin\npm-cli.js
+    popd
+    pause
+    exit /b 1
+  )
+  if errorlevel 1 (
+    echo [Ideogram4 Dataset Editor] npm install failed with exit code %errorlevel%.
     popd
     pause
     exit /b 1
@@ -75,7 +85,7 @@ if not exist "%APP%\node_modules" (
   popd
 )
 if not exist "%APP%\node_modules" (
-  echo [Ideogram4 Dataset Editor] npm install failed.
+  echo [Ideogram4 Dataset Editor] npm install failed - node_modules not created.
   pause
   exit /b 1
 )
