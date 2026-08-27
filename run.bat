@@ -62,11 +62,12 @@ echo [Ideogram4 Dataset Editor] Using portable Node: %NODE_EXE%
 if not exist "%APP%\node_modules" (
   echo [Ideogram4 Dataset Editor] Installing dependencies (first run)...
   pushd "%APP%"
-  if exist "%APP%\node\npm\bin\npm-cli.js" (
+  if exist "%APP%\node\node_modules\npm\bin\npm-cli.js" (
+    "%NODE_EXE%" "%APP%\node\node_modules\npm\bin\npm-cli.js" install
+  ) else if exist "%APP%\node\npm\bin\npm-cli.js" (
     "%NODE_EXE%" "%APP%\node\npm\bin\npm-cli.js" install
   ) else (
-    echo [Ideogram4 Dataset Editor] Portable npm not found at %APP%\node\npm\
-    echo Please copy the npm folder from Node.js distribution to: %APP%\node\npm\
+    echo [Ideogram4 Dataset Editor] Portable npm not found.
     popd
     pause
     exit /b 1
