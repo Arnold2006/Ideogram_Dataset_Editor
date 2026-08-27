@@ -10,6 +10,7 @@
   <div id="app">
     <div id="toolbar">
       <div id="toolbar-title">◈ Ideogram 4 dataset editor</div>
+      <span id="gpu-badge" style="display:none;padding:3px 8px;border-radius:10px;font-size:11px;font-weight:700;border:0.5px solid #3a3a3a;cursor:pointer" title="GPU status — click to view logs">GPU</span>
       <span id="unsaved-dot"></span>
       <span id="save-indicator">✓ Saved</span>
       <div id="progress-wrap" style="display:none"><div id="progress-bar"></div></div>
@@ -204,6 +205,17 @@
         <button class="tbar-btn" id="btn-test-model">Test model</button>
         <button class="tbar-btn" id="btn-restart-server">Restart server</button>
       </div>
+    </div>
+    <div class="field" style="margin-top:14px;border-top:0.5px solid var(--color-border-tertiary);padding-top:14px">
+      <label>Logs & GPU — click toolbar GPU badge to view</label>
+      <div id="gpu-status-detail" style="font-size:12px;color:var(--color-text-secondary);white-space:pre-wrap;min-height:18px">Checking…</div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button class="tbar-btn" id="btn-open-logs">Open logs folder</button>
+        <button class="tbar-btn" id="btn-open-log-file">Open app.log</button>
+        <button class="tbar-btn" id="btn-copy-logs">Copy last log</button>
+        <button class="tbar-btn" id="btn-refresh-gpu">↻ Refresh GPU</button>
+      </div>
+      <pre id="log-preview" style="margin-top:8px;max-height:140px;overflow:auto;background:#101010;border:0.5px solid #3a3a3a;border-radius:8px;padding:8px;font-size:11px;white-space:pre-wrap;display:none"></pre>
     </div>
   </div>
 

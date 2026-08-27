@@ -24,6 +24,7 @@ bin/*
 # bin/*.zip
 # bin/MicrosoftEdgeWebview2Setup.exe
 
+logs/
 update/current_requirements.txt
 update/current_package_lock.txt
 python_embeded/

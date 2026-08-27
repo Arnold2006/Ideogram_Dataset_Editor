@@ -4,7 +4,7 @@ export function initSettings(state){
   const btnOpen=document.getElementById('btn-settings');
   const btnClose=document.getElementById('btn-close-settings');
 
-  function open(){ overlay.style.display='block'; drawer.style.display='block'; refreshModels(); loadPrompt(); refreshInferenceStatus(); }
+  function open(){ overlay.style.display='block'; drawer.style.display='block'; refreshModels(); loadPrompt(); refreshInferenceStatus(); refreshGpuStatus(); }
   function close(){ overlay.style.display='none'; drawer.style.display='none'; }
   btnOpen.addEventListener('click', open);
   btnClose.addEventListener('click', close);
@@ -95,6 +95,46 @@ export function initSettings(state){
       el.textContent = `Active: ${active? active.model + (active.mmproj? ' + '+active.mmproj:'') : '(none)'} · Server: ${st.running? 'running on :'+st.port : 'stopped'}`;
     }catch(e){ el.textContent='Status error: '+e.message; }
   }
+  async function refreshGpuStatus(){
+    const detail=document.getElementById('gpu-status-detail');
+    const badge=document.getElementById('gpu-badge');
+    const preview=document.getElementById('log-preview');
+    try{
+      const gpu=await window.api.getGpuStatus();
+      const logs=await window.api.getLogs();
+      const msg=gpu?.msg || gpu?.exe || 'No GPU info yet — run Test model or Generate to start server';
+      if(detail) detail.textContent=msg + (gpu?.useGpu ? '\n✓ GPU acceleration active' : '\n○ CPU mode — will be ~10x slower. Check nvidia-smi and bin/llama-server-cuda.exe');
+      if(badge){
+        badge.style.display='inline-block';
+        badge.textContent=gpu?.useGpu ? 'GPU ✓' : 'CPU';
+        badge.style.background=gpu?.useGpu ? '#1D9E75' : '#3a3a3a';
+        badge.style.color='white';
+        badge.title=msg + '\nClick to view logs';
+      }
+      if(preview){
+        if(logs){
+          preview.textContent=logs.slice(-3000);
+          preview.style.display='block';
+        } else {
+          preview.style.display='none';
+        }
+      }
+    }catch(e){
+      if(detail) detail.textContent='GPU check failed: '+e.message+'\nLogs at logs/app.log';
+      if(badge){ badge.style.display='inline-block'; badge.textContent='LOG'; badge.style.background='#BA7517'; }
+    }
+  }
+  // Auto-refresh GPU status when drawer opens and when app logs arrive
+  if(window.api.onGpuStatus) window.api.onGpuStatus(()=>refreshGpuStatus());
+  if(window.api.onAppLog){
+    window.api.onAppLog((msg)=>{
+      const p=document.getElementById('log-preview');
+      if(p && p.style.display!=='none'){
+        p.textContent=(p.textContent+'\n'+msg).slice(-4000);
+        p.scrollTop=p.scrollHeight;
+      }
+    });
+  }
 
   // prompt
   const fPrompt=document.getElementById('f-system-prompt');
@@ -122,4 +162,18 @@ export function initSettings(state){
   async function loadPrompt(){
     try{ fPrompt.value = await window.api.getPrompt(); }catch{}
   }
+  // Logs & GPU buttons
+  document.getElementById('btn-open-logs')?.addEventListener('click', ()=> window.api.openLogs());
+  document.getElementById('btn-open-log-file')?.addEventListener('click', ()=> window.api.openLogFile());
+  document.getElementById('btn-copy-logs')?.addEventListener('click', async()=>{
+    try{ const t=await window.api.getLogs(); await navigator.clipboard.writeText(t); alert('Copied last log to clipboard'); }catch(e){ alert('Copy failed: '+e.message); }
+  });
+  document.getElementById('btn-refresh-gpu')?.addEventListener('click', refreshGpuStatus);
+  document.getElementById('gpu-badge')?.addEventListener('click', ()=>{
+    // Open settings and refresh
+    overlay.style.display='block'; drawer.style.display='block';
+    refreshModels(); loadPrompt(); refreshInferenceStatus(); refreshGpuStatus();
+  });
+  // Also update toolbar badge on load
+  refreshGpuStatus();
 }

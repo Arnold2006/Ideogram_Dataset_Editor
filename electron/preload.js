@@ -26,6 +26,10 @@ contextBridge.exposeInMainWorld('api', {
   generateOne: (opts) => ipcRenderer.invoke('generate-one', opts),
   cancelGenerate: () => ipcRenderer.invoke('cancel-generate'),
   getInferenceStatus: () => ipcRenderer.invoke('get-inference-status'),
+  getGpuStatus: () => ipcRenderer.invoke('get-gpu-status'),
+  getLogs: () => ipcRenderer.invoke('get-logs'),
+  openLogs: () => ipcRenderer.invoke('open-logs'),
+  openLogFile: () => ipcRenderer.invoke('open-log-file'),
   restartServer: () => ipcRenderer.invoke('restart-server'),
   testModel: () => ipcRenderer.invoke('test-model'),
   // prompt
@@ -42,5 +46,15 @@ contextBridge.exposeInMainWorld('api', {
     const h = (_e, p) => cb(p);
     ipcRenderer.on('generate-progress', h);
     return () => ipcRenderer.removeListener('generate-progress', h);
+  },
+  onAppLog: (cb) => {
+    const h = (_e, msg) => cb(msg);
+    ipcRenderer.on('app-log', h);
+    return () => ipcRenderer.removeListener('app-log', h);
+  },
+  onGpuStatus: (cb) => {
+    const h = (_e, s) => cb(s);
+    ipcRenderer.on('gpu-status', h);
+    return () => ipcRenderer.removeListener('gpu-status', h);
   }
 });

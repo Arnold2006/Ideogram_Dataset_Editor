@@ -8,7 +8,7 @@ let sharp;
 try { sharp = require('sharp'); } catch(e) { console.warn('sharp not available', e); }
 
 const SUPPORTED_IMG = new Set(['.jpg','.jpeg','.png','.webp','.bmp','.gif']);
-// Resolve app root that survives rebuilds and works for both dev and portable
+// --- Logging (visible when launched via run.bat terminal, plus file + UI) ---
 function getAppRoot() {
   if (!app.isPackaged) return path.join(__dirname, '..');
   const exeDir = path.dirname(app.getPath('exe'));
@@ -35,6 +35,10 @@ const BIN_CANDIDATES = app.isPackaged
   ? [path.join(APP_ROOT, 'bin'), path.join(RESOURCES_DIR, 'bin'), path.join(__dirname, '..', 'bin'), path.join(path.dirname(app.getPath('exe')), 'bin')]
   : [path.join(__dirname, '..', 'bin')];
 const BIN_DIR = BIN_CANDIDATES[0];
+const LOG_DIR = path.join(APP_ROOT, 'logs');
+const LOG_FILE = path.join(LOG_DIR, 'app.log');
+function logToFile(msg){ try{ fs.mkdirSync(LOG_DIR,{recursive:true}); fs.appendFileSync(LOG_FILE, `[${new Date().toISOString()}] ${msg}\n`); }catch{} }
+function logBoth(msg){ console.log(msg); logToFile(msg); try{ if(mainWindow) mainWindow.webContents.send('app-log', msg); }catch{} }
 
 let mainWindow, splash;
 let llamaProc = null;
@@ -302,8 +306,10 @@ async function ensureLlamaBinaryAvailable(){
   throw new Error('llama-server binary not found at '+cpu+'. Auto-download failed — check internet or place llama-server.exe (and cuda variant) in bin/. See bin/README.md or run: node scripts/fetch-llama.js');
 }
 function logToDialog(msg){
+  const line='[llama] '+msg;
+  console.log(line); logToFile(line);
   try{ if(mainWindow) mainWindow.webContents.send('generate-progress',{log:msg}); }catch{}
-  console.log('[llama] '+msg);
+  try{ if(mainWindow) mainWindow.webContents.send('app-log', line); }catch{}
 }
 async function downloadLlamaBinaries(){
   // Reuse scripts/fetch-llama.js logic inline so it works in packaged app without external node.
@@ -453,12 +459,16 @@ async function ensureLlamaRunning(){
   ];
   if(mmprojPath) args.push('--mmproj', mmprojPath);
   if(useGpu) args.push('--n-gpu-layers', '99');
-  console.log(`[llama] Using ${useGpu ? 'GPU' : 'CPU'} — exe=${path.basename(exe)} ctx=${CONTEXT_SIZE} ${useGpu ? 'layers=99 flash-attn=on' : ''} mmproj=${mmprojPath ? 'yes' : 'no'}`);
+  const gpuMsg=`[llama] Using ${useGpu ? 'GPU' : 'CPU'} — exe=${path.basename(exe)} ctx=${CONTEXT_SIZE} ${useGpu ? 'layers=99 flash-attn=on' : ''} mmproj=${mmprojPath ? 'yes' : 'no'}`;
+  logBoth(gpuMsg);
+  // Store for UI
+  try{ global.__lastGpuStatus = { useGpu, exe: path.basename(exe), ctx: CONTEXT_SIZE, mmproj: !!mmprojPath, msg: gpuMsg }; }catch{}
+  try{ if(mainWindow) mainWindow.webContents.send('gpu-status', global.__lastGpuStatus); }catch{}
   llamaLog='';
   llamaProc = spawn(exe, args, { stdio:['ignore','pipe','pipe'] });
-  llamaProc.stdout.on('data',d=>{ const s=d.toString(); llamaLog+=(s+'\n'); if(llamaLog.length>8000) llamaLog=llamaLog.slice(-8000); console.log('[llama]', s.slice(0,500)); });
-  llamaProc.stderr.on('data',d=>{ const s=d.toString(); llamaLog+=(s+'\n'); if(llamaLog.length>8000) llamaLog=llamaLog.slice(-8000); console.log('[llama]', s.slice(0,500)); });
-  llamaProc.on('exit',(code,signal)=>{ console.log('llama exit',code,signal, llamaLog.slice(-500)); llamaProc=null; llamaPort=0; });
+  llamaProc.stdout.on('data',d=>{ const s=d.toString(); llamaLog+=(s+'\n'); if(llamaLog.length>8000) llamaLog=llamaLog.slice(-8000); const line='[llama] '+s.slice(0,500); console.log(line); logToFile(line); });
+  llamaProc.stderr.on('data',d=>{ const s=d.toString(); llamaLog+=(s+'\n'); if(llamaLog.length>8000) llamaLog=llamaLog.slice(-8000); const line='[llama] '+s.slice(0,500); console.log(line); logToFile(line); });
+  llamaProc.on('exit',(code,signal)=>{ const line=`llama exit ${code} ${signal} ${llamaLog.slice(-500)}`; console.log(line); logToFile(line); llamaProc=null; llamaPort=0; });
   // wait for /health
   const start=Date.now();
   while(Date.now()-start<30000){
@@ -714,3 +724,7 @@ ipcMain.handle('test-model', async()=>{
 });
 
 ipcMain.handle('open-path', async(_e,p)=> shell.openPath(p));
+ipcMain.handle('get-gpu-status', async()=> global.__lastGpuStatus || null);
+ipcMain.handle('get-logs', async()=>{ try{ return fs.readFileSync(LOG_FILE,'utf8').slice(-20000); }catch{ return ''; } });
+ipcMain.handle('open-logs', async()=>{ try{ await fsp.mkdir(LOG_DIR,{recursive:true}); }catch{} return shell.openPath(LOG_DIR); });
+ipcMain.handle('open-log-file', async()=>{ try{ await fsp.mkdir(LOG_DIR,{recursive:true}); if(!fs.existsSync(LOG_FILE)) await fsp.writeFile(LOG_FILE,'', 'utf8'); }catch{} return shell.openPath(LOG_FILE); });
