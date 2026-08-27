@@ -267,12 +267,20 @@ async function downloadLlamaBinaries(){
   }
   let cpuUrl=pinCpuUrl, cudaUrl=pinCudaUrl;
   try{
-    const data=await fetchJson('https://api.github.com/repos/ggml-org/llama.cpp/releases/latest');
-    const assets=data.assets||[];
-    const cpu=assets.find(a=>/bin-win-avx2-x64\.zip$/i.test(a.name));
-    const cuda=assets.find(a=>/bin-win-cuda.*x64\.zip$/i.test(a.name));
-    if(cpu) cpuUrl=cpu.browser_download_url;
-    if(cuda) cudaUrl=cuda.browser_download_url;
+    const list=await fetchJson('https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=30');
+    for(const data of list){
+      if(!data.tag_name || !/^b\d+/.test(data.tag_name)) continue;
+      const ver=parseInt(data.tag_name.slice(1),10);
+      if(ver < 6887) continue;
+      const assets=data.assets||[];
+      const cpu=assets.find(a=>/^llama-b.*-bin-win-cpu-x64\.zip$/i.test(a.name)) || assets.find(a=>/^llama-b.*-bin-win-avx2-x64\.zip$/i.test(a.name));
+      if(!cpu) continue;
+      const cuda=assets.find(a=>/^llama-b.*-bin-win-cuda-12\.4-x64\.zip$/i.test(a.name));
+      if(!cuda) continue;
+      cpuUrl=cpu.browser_download_url; cudaUrl=cuda.browser_download_url;
+      logToDialog(`Latest via API: ${data.tag_name} — ${cpu.name} / ${cuda.name}`);
+      break;
+    }
   }catch{}
   const jobs=[];
   if(!fs.existsSync(findLlamaBinary('llama-server.exe'))) jobs.push({url:cpuUrl, target:'llama-server.exe'});
@@ -292,8 +300,8 @@ async function downloadLlamaBinaries(){
         const dest=path.join(targetDir, job.target);
         fs.copyFileSync(found, dest);
         logToDialog('Installed '+dest);
-        // copy dlls
-        (function copyDlls(d){ for(const e of fs.readdirSync(d,{withFileTypes:true})){ const p=path.join(d,e.name); if(e.isDirectory()) copyDlls(p); else if(/\.dll$/i.test(e.name)){ const dd=path.join(targetDir,e.name); if(!fs.existsSync(dd)) try{fs.copyFileSync(p,dd);}catch{} } } })(tmpDir);
+        // copy dlls — overwrite to match exe version
+        (function copyDlls(d){ for(const e of fs.readdirSync(d,{withFileTypes:true})){ const p=path.join(d,e.name); if(e.isDirectory()) copyDlls(p); else if(/\.dll$/i.test(e.name)){ const dd=path.join(targetDir,e.name); try{fs.copyFileSync(p,dd);}catch{} } } })(tmpDir);
       }
       try{ fs.rmSync(tmpDir,{recursive:true,force:true}); }catch{}
     } catch(e){ logToDialog('Download failed for '+job.target+': '+e.message); try{fs.rmSync(path.join(targetDir,'_dl_tmp'),{recursive:true,force:true});}catch{} }

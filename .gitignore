@@ -10,6 +10,7 @@ config/prompt.txt
 config/settings.json
 bin/llama-server*
 bin/*.dll
+bin/*.zip
 bin/MicrosoftEdgeWebview2Setup.exe
 update/current_requirements.txt
 update/current_package_lock.txt

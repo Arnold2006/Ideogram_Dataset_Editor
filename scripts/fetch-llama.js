@@ -14,9 +14,9 @@ const BIN_DIR = path.join(__dirname, '..', 'bin');
 const PINNED = {
   // Pinned known-good release if GitHub API fails. Must be b6887+ for Qwen3-VL support.
   tag: 'b10419',
-  cpuAsset: 'llama-b10419-bin-win-avx2-x64.zip',
+  cpuAsset: 'llama-b10419-bin-win-cpu-x64.zip',
   cudaAsset: 'llama-b10419-bin-win-cuda-12.4-x64.zip',
-  cpuUrl: 'https://github.com/ggml-org/llama.cpp/releases/download/b10419/llama-b10419-bin-win-avx2-x64.zip',
+  cpuUrl: 'https://github.com/ggml-org/llama.cpp/releases/download/b10419/llama-b10419-bin-win-cpu-x64.zip',
   cudaUrl: 'https://github.com/ggml-org/llama.cpp/releases/download/b10419/llama-b10419-bin-win-cuda-12.4-x64.zip',
 };
 
@@ -83,27 +83,54 @@ function expandZip(zipPath, destDir){
 }
 
 async function findLatestUrls(){
+  // Try releases list and pick first b* with win-cpu-x64 (or avx2 fallback) — /releases/latest is v0.3.0, not b*
+  // Require llama-b* prefix for both (not cudart-) and prefer 12.4 cuda
   try{
-    const data = await httpsGetJson('https://api.github.com/repos/ggml-org/llama.cpp/releases/latest');
-    const assets = data.assets || [];
-    // prefer avx2 and cuda 12.4 builds
-    const cpu = assets.find(a=> /bin-win-avx2-x64\.zip$/i.test(a.name));
-    const cuda = assets.find(a=> /bin-win-cuda.*x64\.zip$/i.test(a.name));
-    if(cpu){
-      log('Latest via API: '+cpu.name+' / '+(cuda?cuda.name:'(no cuda)'));
-      return { cpuUrl: cpu.browser_download_url, cudaUrl: cuda?cuda.browser_download_url:null, tag: data.tag_name, cpuName: cpu.name, cudaName: cuda?cuda.name:null };
+    const list = await httpsGetJson('https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=30');
+    for(const data of list){
+      if(!data.tag_name || !/^b\d+/.test(data.tag_name)) continue;
+      const assets = data.assets || [];
+      const cpu = assets.find(a=> /^llama-b.*-bin-win-cpu-x64\.zip$/i.test(a.name)) || assets.find(a=> /^llama-b.*-bin-win-avx2-x64\.zip$/i.test(a.name));
+      if(!cpu) continue;
+      const cuda = assets.find(a=> /^llama-b.*-bin-win-cuda-12\.4-x64\.zip$/i.test(a.name));
+      // Only return if both CPU and CUDA server builds exist and tag is >= b6887 for Qwen3-VL
+      const ver = parseInt(data.tag_name.slice(1),10);
+      if(ver < 6887) continue;
+      if(!cuda) continue; // skip releases without proper CUDA server (e.g. b10645)
+      log('Latest via API: '+data.tag_name+' — '+cpu.name+' / '+cuda.name);
+      return { cpuUrl: cpu.browser_download_url, cudaUrl: cuda.browser_download_url, tag: data.tag_name, cpuName: cpu.name, cudaName: cuda.name };
     }
   } catch(e){ log('GitHub API failed: '+e.message); }
   return null;
 }
 
+function getBinaryVersion(exe){
+  try{
+    const out = require('child_process').execSync(`"${exe}" --version`, {timeout:3000, windowsHide:true}).toString();
+    const m = out.match(/b(\d+)/i);
+    if(m) return parseInt(m[1],10);
+  } catch{}
+  return 0;
+}
 async function main(){
-  const needCpu = !binExists('llama-server.exe');
-  const needCuda = !binExists('llama-server-cuda.exe');
-  if(!needCpu && !needCuda){
+  const force = process.argv.includes('--force');
+  let needCpu = !binExists('llama-server.exe');
+  let needCuda = !binExists('llama-server-cuda.exe');
+  // Force update outdated b<6887 for Qwen3-VL
+  if(!force && binExists('llama-server.exe')){
+    const ver = getBinaryVersion(path.join(BIN_DIR,'llama-server.exe'));
+    if(ver && ver < 6887){
+      log(`Existing binary b${ver} < b6887 — forcing update for Qwen3-VL`);
+      needCpu = true; needCuda = true;
+      // clean old zips to avoid cache hit on old name
+      try{ for(const f of fs.readdirSync(BIN_DIR)) if(/llama-b4242.*\.zip$/i.test(f)) fs.unlinkSync(path.join(BIN_DIR,f)); }catch{}
+    }
+  }
+  if(!needCpu && !needCuda && !force){
     log('llama-server binaries already present — nothing to do.');
     return;
   }
+  if(force){ needCpu=true; if(!binExists('llama-server-cuda.exe') || true) needCuda=true; }
   await ensureBinDir();
   let urls = await findLatestUrls();
   if(!urls){
@@ -142,14 +169,14 @@ async function main(){
         // copy exe
         fs.copyFileSync(src, dest);
         log('Installed '+dest);
-        // copy required DLLs next to it (cublas etc.) - copy all dlls from tmp
+        // copy required DLLs next to it (cublas etc.) - overwrite to ensure version matches exe
         (function copyDlls(d){
           for(const e of fs.readdirSync(d,{withFileTypes:true})){
             const p=path.join(d,e.name);
             if(e.isDirectory()) copyDlls(p);
             else if(/\.dll$/i.test(e.name)){
               const dd = path.join(BIN_DIR, e.name);
-              if(!fs.existsSync(dd)) try{ fs.copyFileSync(p, dd); log('Copied dll '+e.name); }catch{}
+              try{ fs.copyFileSync(p, dd); log('Copied dll '+e.name); }catch{}
             }
           }
         })(tmpDir);
