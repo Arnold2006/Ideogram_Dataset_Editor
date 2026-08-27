@@ -13,12 +13,11 @@ const { execSync, spawnSync } = require('child_process');
 const BIN_DIR = path.join(__dirname, '..', 'bin');
 const PINNED = {
   // Pinned known-good release if GitHub API fails (update when needed).
-  // Uses llama.cpp b4242 as example — replace with latest tested.
   tag: 'b4242',
   cpuAsset: 'llama-b4242-bin-win-avx2-x64.zip',
   cudaAsset: 'llama-b4242-bin-win-cuda-cu12.4-x64.zip',
-  cpuUrl: 'https://github.com/ggerganov/llama.cpp/releases/download/b4242/llama-b4242-bin-win-avx2-x64.zip',
-  cudaUrl: 'https://github.com/ggerganov/llama.cpp/releases/download/b4242/llama-b4242-bin-win-cuda-cu12.4-x64.zip',
+  cpuUrl: 'https://github.com/ggml-org/llama.cpp/releases/download/b4242/llama-b4242-bin-win-avx2-x64.zip',
+  cudaUrl: 'https://github.com/ggml-org/llama.cpp/releases/download/b4242/llama-b4242-bin-win-cuda-cu12.4-x64.zip',
 };
 
 function log(m){ console.log('[fetch-llama] ' + m); }
@@ -33,6 +32,10 @@ function binExists(name){
 function httpsGetJson(url){
   return new Promise((resolve,reject)=>{
     const req = https.get(url, {headers:{'User-Agent':'ideogram4-fetch','Accept':'application/vnd.github+json'}}, res=>{
+      if(res.statusCode>=300 && res.statusCode<400 && res.headers.location){
+        // follow redirect (ggerganov -> ggml-org)
+        httpsGetJson(res.headers.location).then(resolve, reject); return;
+      }
       let d=''; res.on('data',c=>d+=c); res.on('end',()=>{
         if(res.statusCode>=200 && res.statusCode<300){ try{ resolve(JSON.parse(d)); } catch(e){ reject(e); } }
         else reject(new Error('HTTP '+res.statusCode+': '+d.slice(0,400)));
@@ -81,7 +84,7 @@ function expandZip(zipPath, destDir){
 
 async function findLatestUrls(){
   try{
-    const data = await httpsGetJson('https://api.github.com/repos/ggerganov/llama.cpp/releases/latest');
+    const data = await httpsGetJson('https://api.github.com/repos/ggml-org/llama.cpp/releases/latest');
     const assets = data.assets || [];
     // prefer avx2 and cuda 12.4 builds
     const cpu = assets.find(a=> /bin-win-avx2-x64\.zip$/i.test(a.name));

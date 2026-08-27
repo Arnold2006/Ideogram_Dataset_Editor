@@ -22,7 +22,7 @@ try{
   Write-Host "[fetch-llama.ps1] node not found, using PowerShell download (pinned b4242)"
   $binDir = Join-Path $PSScriptRoot "..\bin"
   New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-  $url = "https://github.com/ggerganov/llama.cpp/releases/download/b4242/llama-b4242-bin-win-avx2-x64.zip"
+  $url = "https://github.com/ggml-org/llama.cpp/releases/download/b4242/llama-b4242-bin-win-avx2-x64.zip"
   $zip = Join-Path $binDir "llama-b4242-bin-win-avx2-x64.zip"
   if(-not (Test-Path $zip)){
     Write-Host "Downloading $url"

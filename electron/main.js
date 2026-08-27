@@ -226,12 +226,15 @@ async function downloadLlamaBinaries(){
   const targetDir = BIN_DIR;
   await fsp.mkdir(targetDir,{recursive:true});
   const pinTag='b4242';
-  const pinCpuUrl='https://github.com/ggerganov/llama.cpp/releases/download/b4242/llama-b4242-bin-win-avx2-x64.zip';
-  const pinCudaUrl='https://github.com/ggerganov/llama.cpp/releases/download/b4242/llama-b4242-bin-win-cuda-cu12.4-x64.zip';
+  const pinCpuUrl='https://github.com/ggml-org/llama.cpp/releases/download/b4242/llama-b4242-bin-win-avx2-x64.zip';
+  const pinCudaUrl='https://github.com/ggml-org/llama.cpp/releases/download/b4242/llama-b4242-bin-win-cuda-cu12.4-x64.zip';
   // try GitHub API for latest
   async function fetchJson(url){
     return new Promise((res,rej)=>{
       const req=https.get(url,{headers:{'User-Agent':'ideogram4','Accept':'application/vnd.github+json'}}, r=>{
+        if(r.statusCode>=300&&r.statusCode<400&&r.headers.location){
+          fetchJson(r.headers.location).then(res,rej); return;
+        }
         let d=''; r.on('data',c=>d+=c); r.on('end',()=>{
           if(r.statusCode>=200&&r.statusCode<300){ try{res(JSON.parse(d));}catch(e){rej(e);} } else rej(new Error('HTTP '+r.statusCode));
         });
@@ -263,7 +266,7 @@ async function downloadLlamaBinaries(){
   }
   let cpuUrl=pinCpuUrl, cudaUrl=pinCudaUrl;
   try{
-    const data=await fetchJson('https://api.github.com/repos/ggerganov/llama.cpp/releases/latest');
+    const data=await fetchJson('https://api.github.com/repos/ggml-org/llama.cpp/releases/latest');
     const assets=data.assets||[];
     const cpu=assets.find(a=>/bin-win-avx2-x64\.zip$/i.test(a.name));
     const cuda=assets.find(a=>/bin-win-cuda.*x64\.zip$/i.test(a.name));
