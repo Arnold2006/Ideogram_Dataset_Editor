@@ -2,12 +2,14 @@
   "name": "ideoprompt",
   "version": "1.0.0",
   "private": true,
-  "description": "Describe an image, get a 100% schema-valid Ideogram 4 JSON prompt — generated fully locally.",
+  "description": "FrameForge Portable — Windows dataset editor with 3-column grid and prompt editor (Ideogram 4 JSON / plain / MiniMax). No install required.",
   "type": "module",
   "main": "server.mjs",
   "scripts": {
     "start": "node server.mjs",
-    "test": "node test/web-search.test.mjs && node test/minimax.test.mjs"
+    "portable": "node server.mjs",
+    "download-llama": "node scripts/download-llama.mjs",
+    "test": "node test/minimax.test.mjs"
   },
   "engines": {
     "node": ">=20"
