@@ -18,8 +18,9 @@ if not exist "%NODE_EXE%" (
   if not exist "%NODE_DIR%" mkdir "%NODE_DIR%"
   
   set "ZIP=%APP%\node.zip"
+  set "NODE_URL=https://nodejs.org/dist/v20.18.0/node-v20.18.0-win-x64.zip"
   echo Downloading Node.js v20.18.0...
-  powershell -NoProfile -Command "Invoke-WebRequest -Uri '%NODE_URL%' -OutFile '%ZIP%'"
+  powershell -NoProfile -Command "$url='%NODE_URL%'; $zip='%ZIP%'; Invoke-WebRequest -Uri $url -OutFile $zip"
   if errorlevel 1 (
     echo Download failed. Check internet connection.
     pause
@@ -27,10 +28,10 @@ if not exist "%NODE_EXE%" (
   )
   
   echo Extracting Node.js...
-  powershell -NoProfile -Command "Expand-Archive -Path '%ZIP%' -DestinationPath '%NODE_DIR%' -Force"
+  powershell -NoProfile -Command "$zip='%ZIP%'; $dest='%NODE_DIR%'; Expand-Archive -Path $zip -DestinationPath $dest -Force"
   if errorlevel 1 (
     echo Extraction failed.
-    del "%ZIP%"
+    if exist "%ZIP%" del "%ZIP%"
     pause
     exit /b 1
   )
@@ -41,7 +42,7 @@ if not exist "%NODE_EXE%" (
     rmdir /s /q "%%d"
   )
   
-  del "%ZIP%"
+  if exist "%ZIP%" del "%ZIP%"
   echo Node.js installed to %NODE_DIR%
 )
 
