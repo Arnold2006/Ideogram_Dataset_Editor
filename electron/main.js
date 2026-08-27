@@ -21,6 +21,7 @@ let mainWindow, splash;
 let llamaProc = null;
 let llamaPort = 0;
 let activeCancel = null;
+let llamaLog = '';
 
 function createSplash(){
   splash = new BrowserWindow({ width:380, height:260, frame:false, transparent:true, alwaysOnTop:true, center:true, resizable:false, show:true, skipTaskbar:false });
@@ -225,9 +226,9 @@ async function downloadLlamaBinaries(){
   // Downloads pinned release via HTTPS and expands via PowerShell Expand-Archive.
   const targetDir = BIN_DIR;
   await fsp.mkdir(targetDir,{recursive:true});
-  const pinTag='b4242';
-  const pinCpuUrl='https://github.com/ggml-org/llama.cpp/releases/download/b4242/llama-b4242-bin-win-avx2-x64.zip';
-  const pinCudaUrl='https://github.com/ggml-org/llama.cpp/releases/download/b4242/llama-b4242-bin-win-cuda-cu12.4-x64.zip';
+  const pinTag='b10419';
+  const pinCpuUrl='https://github.com/ggml-org/llama.cpp/releases/download/b10419/llama-b10419-bin-win-avx2-x64.zip';
+  const pinCudaUrl='https://github.com/ggml-org/llama.cpp/releases/download/b10419/llama-b10419-bin-win-cuda-12.4-x64.zip';
   // try GitHub API for latest
   async function fetchJson(url){
     return new Promise((res,rej)=>{
@@ -305,6 +306,14 @@ function killLlama(){
 async function hasNvidia(){
   try{ const {execSync}=require('child_process'); execSync('nvidia-smi',{stdio:'ignore',timeout:2000}); return true; }catch{ return false; }
 }
+function getBinaryVersion(exe){
+  try{
+    const out = require('child_process').execSync(`"${exe}" --version`, {timeout:3000, windowsHide:true}).toString();
+    const m = out.match(/b(\d+)/i);
+    if(m) return parseInt(m[1],10);
+  } catch{}
+  return 0;
+}
 async function ensureLlamaRunning(){
   if(llamaProc && llamaPort) return llamaPort;
   const cfg = await (async()=>{ try{ return JSON.parse(await fsp.readFile(path.join(MODELS_DIR,'active.json'),'utf8'));}catch{ return null; }})();
@@ -316,6 +325,19 @@ async function ensureLlamaRunning(){
   let bin;
   try{ bin = await ensureLlamaBinaryAvailable(); } catch(e){ throw e; }
   try{ await fsp.access(bin);}catch{ throw new Error('llama-server binary not found at '+bin+'. Auto-download failed — check internet or run: node scripts/fetch-llama.js'); }
+  // Auto-update outdated binary for Qwen3-VL (needs b6887+, pinned b10419)
+  if(cfg.model && cfg.model.toLowerCase().includes('qwen3')){
+    const ver = getBinaryVersion(bin);
+    if(ver && ver < 6887){
+      logToDialog(`Binary ${bin} is b${ver} < b6887 — too old for Qwen3-VL, auto-updating to ${'b10419'}...`);
+      try{
+        for(const name of ['llama-server.exe','llama-server-cuda.exe']) { try{ await fsp.unlink(findLlamaBinary(name)); }catch{} }
+        for(const f of await fsp.readdir(BIN_DIR).catch(()=>[])) if(/llama-b4242.*\.zip$/i.test(f)) try{ await fsp.unlink(path.join(BIN_DIR,f)); }catch{}
+      }catch{}
+      await downloadLlamaBinaries().catch(()=>{});
+      bin = await ensureLlamaBinaryAvailable();
+    }
+  }
   // pick port
   const net=require('net');
   const getPort=()=> new Promise((res,rej)=>{ const s=net.createServer(); s.listen(0,()=>{ const p=s.address().port; s.close(()=>res(p)); }); s.on('error',rej); });
@@ -323,16 +345,19 @@ async function ensureLlamaRunning(){
   const { spawn } = require('child_process');
   const args = ['--model', modelPath, '--host','127.0.0.1','--port',String(llamaPort),'--ctx-size','8192'];
   if(mmprojPath) args.push('--mmproj', mmprojPath);
+  // Qwen3-VL needs --jinja chat template (see PR #16780, b6887+)
+  if(cfg.model && cfg.model.toLowerCase().includes('qwen3')) args.push('--jinja');
   // prefer cuda binary if gpu present
   let exe = bin;
   const cudaBin = findLlamaBinary('llama-server-cuda.exe');
   if(bin.endsWith('llama-server.exe') && fs.existsSync(cudaBin) && await hasNvidia()){
     exe = cudaBin;
   }
+  llamaLog='';
   llamaProc = spawn(exe, args, { stdio:['ignore','pipe','pipe'] });
-  llamaProc.stdout.on('data',d=> console.log('[llama]', d.toString().slice(0,500)));
-  llamaProc.stderr.on('data',d=> console.log('[llama]', d.toString().slice(0,500)));
-  llamaProc.on('exit',(c)=>{ console.log('llama exit',c); llamaProc=null; llamaPort=0; });
+  llamaProc.stdout.on('data',d=>{ const s=d.toString(); llamaLog+=(s+'\n'); if(llamaLog.length>8000) llamaLog=llamaLog.slice(-8000); console.log('[llama]', s.slice(0,500)); });
+  llamaProc.stderr.on('data',d=>{ const s=d.toString(); llamaLog+=(s+'\n'); if(llamaLog.length>8000) llamaLog=llamaLog.slice(-8000); console.log('[llama]', s.slice(0,500)); });
+  llamaProc.on('exit',(code,signal)=>{ console.log('llama exit',code,signal, llamaLog.slice(-500)); llamaProc=null; llamaPort=0; });
   // wait for /health
   const start=Date.now();
   while(Date.now()-start<30000){
@@ -344,7 +369,21 @@ async function ensureLlamaRunning(){
       if(ok) return llamaPort;
     }catch{}
     await new Promise(r=>setTimeout(r,400));
-    if(!llamaProc) throw new Error('llama-server exited unexpectedly');
+    if(!llamaProc){
+      const tail = llamaLog ? ('\nLast log:\n'+llamaLog.slice(-1200)) : '';
+      // detect outdated binary for Qwen3-VL — auto-update
+      if(/unknown.*qwen3/i.test(llamaLog) || /unknown model architecture/i.test(llamaLog)){
+        logToDialog('Outdated binary detected (b4242) for Qwen3-VL — auto-updating to b10419...');
+        try{
+          for(const name of ['llama-server.exe','llama-server-cuda.exe']) { try{ await fsp.unlink(findLlamaBinary(name)); }catch{} }
+          for(const f of await fsp.readdir(BIN_DIR).catch(()=>[])) if(/llama-b4242.*\.zip$/i.test(f)) try{ await fsp.unlink(path.join(BIN_DIR,f)); }catch{}
+          await downloadLlamaBinaries();
+        } catch(e){ logToDialog('auto-update failed: '+e.message); }
+        throw new Error('llama-server was outdated (b4242) for Qwen3-VL and has been auto-updated to b10419.'+tail
+          + '\n\nPlease click Test model again. If it still fails, run: node scripts/fetch-llama.js');
+      }
+      throw new Error('llama-server exited unexpectedly'+tail);
+    }
   }
   throw new Error('llama-server did not become ready in 30s');
 }

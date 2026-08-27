@@ -12,12 +12,12 @@ const { execSync, spawnSync } = require('child_process');
 
 const BIN_DIR = path.join(__dirname, '..', 'bin');
 const PINNED = {
-  // Pinned known-good release if GitHub API fails (update when needed).
-  tag: 'b4242',
-  cpuAsset: 'llama-b4242-bin-win-avx2-x64.zip',
-  cudaAsset: 'llama-b4242-bin-win-cuda-cu12.4-x64.zip',
-  cpuUrl: 'https://github.com/ggml-org/llama.cpp/releases/download/b4242/llama-b4242-bin-win-avx2-x64.zip',
-  cudaUrl: 'https://github.com/ggml-org/llama.cpp/releases/download/b4242/llama-b4242-bin-win-cuda-cu12.4-x64.zip',
+  // Pinned known-good release if GitHub API fails. Must be b6887+ for Qwen3-VL support.
+  tag: 'b10419',
+  cpuAsset: 'llama-b10419-bin-win-avx2-x64.zip',
+  cudaAsset: 'llama-b10419-bin-win-cuda-12.4-x64.zip',
+  cpuUrl: 'https://github.com/ggml-org/llama.cpp/releases/download/b10419/llama-b10419-bin-win-avx2-x64.zip',
+  cudaUrl: 'https://github.com/ggml-org/llama.cpp/releases/download/b10419/llama-b10419-bin-win-cuda-12.4-x64.zip',
 };
 
 function log(m){ console.log('[fetch-llama] ' + m); }
