@@ -7,6 +7,89 @@ import { initSettings } from './settings.js';
 
 const state = createAppState();
 
+// Fallback for Node server (FrameForge engine) when not in Electron
+if(!window.api){
+  const API_BASE = `http://${location.hostname}:7860`;
+  console.log('[api] Using HTTP fallback at', API_BASE, '(FrameForge engine)');
+  window.api = {
+    selectFolder: async ()=>{
+      const folder = prompt("Enter dataset folder path (e.g. C:\\path\\to\\images):");
+      return folder && folder.trim() ? folder.trim() : null;
+    },
+    listDataset: async (folder)=>{
+      const r=await fetch(`${API_BASE}/api/list-dataset`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folder})});
+      if(!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+    getThumbnail: async (imagePath,size)=>{
+      const r=await fetch(`${API_BASE}/api/get-thumbnail`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({imagePath,size})});
+      if(!r.ok) throw new Error(await r.text());
+      const j=await r.json(); return j.dataUrl;
+    },
+    getImageData: async (imagePath)=>{
+      const r=await fetch(`${API_BASE}/api/get-image-data`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({imagePath})});
+      if(!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+    writeJson: async (jsonPath,data)=>{
+      const r=await fetch(`${API_BASE}/api/write-json`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jsonPath,data})});
+      if(!r.ok) throw new Error(await r.text());
+      return r.json();
+    },
+    listModels: async ()=>{
+      const r=await fetch(`${API_BASE}/api/models`); if(!r.ok) throw new Error(await r.text()); return r.json();
+    },
+    selectModelFile: async ()=>{ alert("Upload via Settings > Upload .gguf — pick file in dialog"); return null; },
+    uploadModel: async (srcPath)=>{ throw new Error("Upload via HTTP not yet implemented — copy .gguf to models/ manually"); },
+    deleteModel: async (name)=>{
+      const r=await fetch(`${API_BASE}/api/delete-model`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});
+      if(!r.ok) throw new Error(await r.text()); return true;
+    },
+    setActiveModel: async (name,mmproj)=>{
+      const r=await fetch(`${API_BASE}/api/set-active-model`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,mmproj})});
+      if(!r.ok) throw new Error(await r.text()); return r.json();
+    },
+    getActiveModel: async ()=>{
+      const r=await fetch(`${API_BASE}/api/get-active-model`); if(!r.ok) return null; return r.json();
+    },
+    generateOne: async (opts)=>{
+      const r=await fetch(`${API_BASE}/api/generate`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(opts)});
+      if(!r.ok) throw new Error(await r.text());
+      // NDJSON streaming — we need to handle chunked response like FrameForge
+      const text=await r.text();
+      const lines=text.trim().split("\n");
+      let last=null;
+      for(const line of lines){
+        try{
+          const evt=JSON.parse(line);
+          if(evt.type==="done" && evt.prompt) last=evt.prompt;
+          if(evt.type==="done" && evt.prompt_compact) last=JSON.parse(evt.prompt_compact);
+        }catch{}
+      }
+      if(last) return last;
+      // Fallback: try to parse as single JSON
+      try{ return JSON.parse(text); }catch{ throw new Error("Invalid generation response"); }
+    },
+    getInferenceStatus: async ()=>{
+      const r=await fetch(`${API_BASE}/api/health`); if(!r.ok) return {running:false}; const j=await r.json(); return {running:j.status==="ok", port:7860};
+    },
+    getGpuStatus: async ()=>{
+      const r=await fetch(`${API_BASE}/api/health`); if(!r.ok) return null; const j=await r.json(); return {useGpu: j.vision, msg:`Model: ${j.model || "none"} — ${j.vision?"GPU":"CPU"}`};
+    },
+    getLogs: async ()=>"",
+    openLogs: async ()=>{},
+    openLogFile: async ()=>{},
+    getPrompt: async ()=>"",
+    savePrompt: async ()=>{},
+    restorePrompt: async ()=>"",
+    checkPath: async (p)=>{ const r=await fetch(`${API_BASE}/api/check-path`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:p})}); return r.json(); },
+    restartServer: async ()=>{},
+    testModel: async ()=>{
+      const r=await fetch(`${API_BASE}/api/test-model`,{method:"POST"}); if(!r.ok) throw new Error(await r.text()); return r.json();
+    },
+  };
+}
+
 document.getElementById('btn-open-folder').addEventListener('click', openFolder);
 document.getElementById('btn-choose-folder-2').addEventListener('click', openFolder);
 document.getElementById('btn-refresh').addEventListener('click', ()=> state.folder && loadDataset(state.folder));

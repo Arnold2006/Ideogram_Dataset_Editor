@@ -1,10 +1,19 @@
-const { LIMITS } = require('./ideogram-schema');
+// Deterministic normalization of a grammar-constrained generation into a
+// canonical Ideogram 4 caption. Fixes everything the grammar cannot express:
+// hex color case/format, bbox clamping to 0-1000 and min<=max ordering,
+// palette length caps, photo/art variant conflicts, and canonical key order.
+// Never invents content — unfixable fields are dropped if optional, and the
+// whole result is rejected (ok: false) if a required field is unusable.
+
+import { LIMITS } from "./ideogram-schema.mjs";
+
 function nonEmptyString(value) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
-function normalizeHexColor(value) {
+
+export function normalizeHexColor(value) {
   if (typeof value !== "string") return null;
   let v = value.trim().toUpperCase();
   if (!v.startsWith("#")) v = "#" + v;
@@ -13,6 +22,7 @@ function normalizeHexColor(value) {
   }
   return /^#[0-9A-F]{6}$/.test(v) ? v : null;
 }
+
 function normalizePalette(value, maxItems) {
   if (!Array.isArray(value)) return null;
   const out = [];
@@ -23,6 +33,10 @@ function normalizePalette(value, maxItems) {
   }
   return out.length > 0 ? out : null;
 }
+
+// Accepts the official array form [y_min, x_min, y_max, x_max] or the labeled
+// object form {y_min, x_min, y_max, x_max} used by the generation grammar;
+// always returns the official array form.
 function normalizeBbox(value) {
   let coords = value;
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
@@ -39,19 +53,29 @@ function normalizeBbox(value) {
   if (xMin > xMax) [xMin, xMax] = [xMax, xMin];
   return [yMin, xMin, yMax, xMax];
 }
+
+// Key order: photo -> aesthetics, lighting, photo, medium, color_palette
+//            art   -> aesthetics, lighting, medium, art_style, color_palette
 function normalizeStyle(style) {
-  if (typeof style !== "object" || style === null || Array.isArray(style)) return null;
+  if (typeof style !== "object" || style === null || Array.isArray(style)) {
+    return null;
+  }
   const aesthetics = nonEmptyString(style.aesthetics);
   const lighting = nonEmptyString(style.lighting);
   if (aesthetics === null || lighting === null) return null;
+
   let photo = nonEmptyString(style.photo);
   let medium = nonEmptyString(style.medium);
   let artStyle = nonEmptyString(style.art_style);
   const palette = normalizePalette(style.color_palette, LIMITS.stylePaletteMax);
+
+  // The grammar's art branch cannot forbid medium "photograph"; if the model
+  // described a photograph through the art branch, fold art_style into photo.
   if (photo === null && medium !== null && medium.toLowerCase() === "photograph") {
     photo = artStyle;
     artStyle = null;
   }
+
   if (photo !== null) {
     const out = { aesthetics, lighting, photo, medium: "photograph" };
     if (palette !== null) out.color_palette = palette;
@@ -64,13 +88,19 @@ function normalizeStyle(style) {
   }
   return null;
 }
+
+// Key order: obj  -> type, bbox, desc, color_palette
+//            text -> type, bbox, text, desc, color_palette
 function normalizeElement(element) {
-  if (typeof element !== "object" || element === null || Array.isArray(element)) return null;
+  if (typeof element !== "object" || element === null || Array.isArray(element)) {
+    return null;
+  }
   const desc = nonEmptyString(element.desc);
   if (desc === null) return null;
   const bbox = normalizeBbox(element.bbox);
   const palette = normalizePalette(element.color_palette, LIMITS.elementPaletteMax);
   const text = element.type === "text" ? nonEmptyString(element.text) : null;
+
   const out = { type: text !== null ? "text" : "obj" };
   if (bbox !== null) out.bbox = bbox;
   if (text !== null) out.text = text;
@@ -78,10 +108,14 @@ function normalizeElement(element) {
   if (palette !== null) out.color_palette = palette;
   return out;
 }
-function normalizeCaption(raw) {
+
+// Returns { ok: true, value } with a caption in canonical key order, or
+// { ok: false, reason } when required content is unusable (caller regenerates).
+export function normalizeCaption(raw) {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     return { ok: false, reason: "output is not a JSON object" };
   }
+
   const composition = raw.compositional_deconstruction;
   if (typeof composition !== "object" || composition === null || Array.isArray(composition)) {
     return { ok: false, reason: "compositional_deconstruction is missing" };
@@ -97,6 +131,9 @@ function normalizeCaption(raw) {
   if (elements.length === 0) {
     return { ok: false, reason: "compositional_deconstruction.elements is empty" };
   }
+
+  // Top-level key order: high_level_description, style_description,
+  // compositional_deconstruction.
   const out = {};
   if (highLevel !== null) out.high_level_description = highLevel;
   const style = normalizeStyle(raw.style_description);
@@ -104,5 +141,9 @@ function normalizeCaption(raw) {
   out.compositional_deconstruction = { background, elements };
   return { ok: true, value: out };
 }
-function serializeCaption(caption) { return JSON.stringify(caption); }
-module.exports = { normalizeCaption, serializeCaption, normalizeHexColor };
+
+// Compact serialization, matching the official docs' recommendation of
+// json.dumps(caption, separators=(",", ":"), ensure_ascii=False).
+export function serializeCaption(caption) {
+  return JSON.stringify(caption);
+}

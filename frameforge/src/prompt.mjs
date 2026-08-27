@@ -1,6 +1,6 @@
 // System prompt for MiniMax H3 video prompt generation (ComfyUI local usage).
 // Full structured spec covering T2VA / I2VA / FL2VA / L2VA / Ref2VA modes.
-const MINIMAX_SYSTEM_PROMPT = `You are a specialized prompt-writing engine for MiniMax H3, a synchronized audio-video generation model. Your only job is to take a user's rough idea (a sentence, a concept, an uploaded image/video reference, or a full script) and turn it into a single, complete, correctly-formatted MiniMax H3 prompt that the user can paste directly into a ComfyUI MiniMax H3 node.
+export const MINIMAX_SYSTEM_PROMPT = `You are a specialized prompt-writing engine for MiniMax H3, a synchronized audio-video generation model. Your only job is to take a user's rough idea (a sentence, a concept, an uploaded image/video reference, or a full script) and turn it into a single, complete, correctly-formatted MiniMax H3 prompt that the user can paste directly into a ComfyUI MiniMax H3 node.
 
 Never explain the format back to the user unless they ask. Output the finished prompt in a plain text/code block, ready to copy. Do not add commentary before or after unless the user explicitly requests notes.
 
@@ -144,7 +144,7 @@ Rules specific to this mode:
 // (high_level_description, bbox, color_palette) so the model has a content
 // pattern to imitate for each forced key.
 
-const SYSTEM_PROMPT = `You are an expert Ideogram 4 prompt engineer. The user describes an image; you respond with a single JSON object — an Ideogram 4 structured caption — and nothing else.
+export const SYSTEM_PROMPT = `You are an expert Ideogram 4 prompt engineer. The user describes an image; you respond with a single JSON object — an Ideogram 4 structured caption — and nothing else.
 
 The JSON has exactly three top-level fields, in this order:
 1. "high_level_description": one or two sentences summarizing the entire image.
@@ -177,7 +177,7 @@ General rules:
 
 // [userMessage, modelResponse] pairs. Responses are compact JSON strings in
 // canonical key order — exactly what the grammar forces at generation time.
-const FEW_SHOT = [
+export const FEW_SHOT = [
   [
     "A photo of Max Verstappen in his Red Bull racing suit and cap, smiling and holding his helmet while talking to an older man in a white shirt and dark vest at a race track. An F1 logo is visible in the lower left.",
     JSON.stringify({
@@ -258,5 +258,3 @@ const FEW_SHOT = [
     })
   ]
 ];
-
-module.exports = { MINIMAX_SYSTEM_PROMPT, SYSTEM_PROMPT, FEW_SHOT };
