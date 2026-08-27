@@ -12,7 +12,8 @@
     "electron": "electron .",
     "dist": "vite build && electron-builder --win dir --x64",
     "dist:zip": "vite build && electron-builder --win dir --x64 && npm run package:zip",
-    "package:zip": "node scripts/package-zip.js"
+    "package:zip": "node scripts/package-zip.js",
+    "fetch-llama": "node scripts/fetch-llama.js"
   },
   "dependencies": {
     "sharp": "^0.33.4"

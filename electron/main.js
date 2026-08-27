@@ -8,10 +8,14 @@ let sharp;
 try { sharp = require('sharp'); } catch(e) { console.warn('sharp not available', e); }
 
 const SUPPORTED_IMG = new Set(['.jpg','.jpeg','.png','.webp','.bmp','.gif']);
+const RESOURCES_DIR = app.isPackaged ? path.join(path.dirname(app.getPath('exe')), 'resources', 'app') : path.join(__dirname, '..');
 const CONFIG_DIR = path.join(app.isPackaged ? path.dirname(app.getPath('exe')) : __dirname + '/..', 'config');
 const MODELS_DIR = path.join(app.isPackaged ? path.dirname(app.getPath('exe')) : __dirname + '/..', 'models');
-const PROMPTS_DIR = path.join(__dirname, '..', 'prompts');
-const BIN_DIR = path.join(app.isPackaged ? path.dirname(app.getPath('exe')) : __dirname + '/..', 'bin');
+const PROMPTS_DIR = app.isPackaged ? path.join(RESOURCES_DIR, 'prompts') : path.join(__dirname, '..', 'prompts');
+const BIN_CANDIDATES = app.isPackaged
+  ? [path.join(path.dirname(app.getPath('exe')), 'bin'), path.join(RESOURCES_DIR, 'bin'), path.join(__dirname, '..', 'bin')]
+  : [path.join(__dirname, '..', 'bin')];
+const BIN_DIR = BIN_CANDIDATES[0];
 
 let mainWindow, splash;
 let llamaProc = null;
@@ -185,16 +189,111 @@ ipcMain.handle('restore-prompt', async()=>{
   return def;
 });
 
-// llama.cpp inference
+// llama.cpp inference — handles both exeDir/bin and resources/app/bin (fix for electron-builder)
+function findLlamaBinary(name){
+  for(const dir of BIN_CANDIDATES){
+    const p = path.join(dir, name);
+    try{ if(fs.existsSync(p) && fs.statSync(p).size>1024) return p; }catch{}
+    const sub = path.join(dir, 'llama-server', name);
+    try{ if(fs.existsSync(sub)) return sub; }catch{}
+  }
+  return path.join(BIN_DIR, name);
+}
 function getLlamaBinary(){
-  const cudaExe = path.join(BIN_DIR,'llama-server-cuda.exe');
-  const cpuExe = path.join(BIN_DIR,'llama-server.exe');
-  const altCpu = path.join(BIN_DIR,'llama-server','llama-server.exe');
-  // prefer cuda if exists and nvidia-smi present; check file exists
-  try{ if(fs.existsSync(cudaExe)) return cudaExe; }catch{}
-  try{ if(fs.existsSync(cpuExe)) return cpuExe; }catch{}
-  if(fs.existsSync(altCpu)) return altCpu;
-  return cpuExe;
+  const cuda = findLlamaBinary('llama-server-cuda.exe');
+  const cpu = findLlamaBinary('llama-server.exe');
+  if(fs.existsSync(cuda)) return cuda;
+  if(fs.existsSync(cpu)) return cpu;
+  return cpu;
+}
+async function ensureLlamaBinaryAvailable(){
+  const cpu = findLlamaBinary('llama-server.exe');
+  if(fs.existsSync(cpu) && fs.statSync(cpu).size>1024) return cpu;
+  // try to auto-download (internet required, once)
+  logToDialog('llama-server not found — downloading automatically...');
+  try{ await downloadLlamaBinaries(); }catch(e){ console.warn('auto-download failed', e); }
+  const after = findLlamaBinary('llama-server.exe');
+  if(fs.existsSync(after)) return after;
+  throw new Error('llama-server binary not found at '+cpu+'. Auto-download failed — check internet or place llama-server.exe (and cuda variant) in bin/. See bin/README.md or run: node scripts/fetch-llama.js');
+}
+function logToDialog(msg){
+  try{ if(mainWindow) mainWindow.webContents.send('generate-progress',{log:msg}); }catch{}
+  console.log('[llama] '+msg);
+}
+async function downloadLlamaBinaries(){
+  // Reuse scripts/fetch-llama.js logic inline so it works in packaged app without external node.
+  // Downloads pinned release via HTTPS and expands via PowerShell Expand-Archive.
+  const targetDir = BIN_DIR;
+  await fsp.mkdir(targetDir,{recursive:true});
+  const pinTag='b4242';
+  const pinCpuUrl='https://github.com/ggerganov/llama.cpp/releases/download/b4242/llama-b4242-bin-win-avx2-x64.zip';
+  const pinCudaUrl='https://github.com/ggerganov/llama.cpp/releases/download/b4242/llama-b4242-bin-win-cuda-cu12.4-x64.zip';
+  // try GitHub API for latest
+  async function fetchJson(url){
+    return new Promise((res,rej)=>{
+      const req=https.get(url,{headers:{'User-Agent':'ideogram4','Accept':'application/vnd.github+json'}}, r=>{
+        let d=''; r.on('data',c=>d+=c); r.on('end',()=>{
+          if(r.statusCode>=200&&r.statusCode<300){ try{res(JSON.parse(d));}catch(e){rej(e);} } else rej(new Error('HTTP '+r.statusCode));
+        });
+      });
+      req.on('error',rej); req.setTimeout(8000,()=>{req.destroy();rej(new Error('timeout'));});
+    });
+  }
+  function dl(url,dest){
+    return new Promise((res,rej)=>{
+      logToDialog('Downloading '+url);
+      const file=fs.createWriteStream(dest);
+      const req=https.get(url,{headers:{'User-Agent':'ideogram4'}}, r=>{
+        if(r.statusCode>=300&&r.statusCode<400&&r.headers.location){
+          file.close(); try{fs.unlinkSync(dest);}catch{}
+          dl(r.headers.location,dest).then(res,rej); return;
+        }
+        if(r.statusCode!==200){ file.close(); try{fs.unlinkSync(dest);}catch{} rej(new Error('HTTP '+r.statusCode)); return; }
+        r.pipe(file); file.on('finish',()=>file.close(res));
+      });
+      req.on('error',e=>{ file.close(); try{fs.unlinkSync(dest);}catch{} rej(e); });
+      req.setTimeout(30000,()=>{req.destroy(); file.close(); try{fs.unlinkSync(dest);}catch{} rej(new Error('timeout'));});
+    });
+  }
+  function expand(zip, out){
+    if(process.platform==='win32'){
+      const ps=`Expand-Archive -LiteralPath '${zip}' -DestinationPath '${out}' -Force`;
+      require('child_process').execSync(`powershell -NoProfile -Command "${ps.replace(/"/g,'`"')}"`,{stdio:'inherit'});
+    } else require('child_process').execSync(`unzip -o "${zip}" -d "${out}"`,{stdio:'inherit'});
+  }
+  let cpuUrl=pinCpuUrl, cudaUrl=pinCudaUrl;
+  try{
+    const data=await fetchJson('https://api.github.com/repos/ggerganov/llama.cpp/releases/latest');
+    const assets=data.assets||[];
+    const cpu=assets.find(a=>/bin-win-avx2-x64\.zip$/i.test(a.name));
+    const cuda=assets.find(a=>/bin-win-cuda.*x64\.zip$/i.test(a.name));
+    if(cpu) cpuUrl=cpu.browser_download_url;
+    if(cuda) cudaUrl=cuda.browser_download_url;
+  }catch{}
+  const jobs=[];
+  if(!fs.existsSync(findLlamaBinary('llama-server.exe'))) jobs.push({url:cpuUrl, target:'llama-server.exe'});
+  if(!fs.existsSync(findLlamaBinary('llama-server-cuda.exe')) && cudaUrl) jobs.push({url:cudaUrl, target:'llama-server-cuda.exe'});
+  for(const job of jobs){
+    const zipName=path.basename(job.url);
+    const zipPath=path.join(targetDir, zipName);
+    const tmpDir=path.join(targetDir,'_dl_tmp');
+    try{
+      await fsp.mkdir(tmpDir,{recursive:true});
+      if(!fs.existsSync(zipPath)) await dl(job.url, zipPath);
+      expand(zipPath, tmpDir);
+      // find exe
+      let found=null;
+      (function walk(d){ for(const e of fs.readdirSync(d,{withFileTypes:true})){ const p=path.join(d,e.name); if(e.isDirectory()) walk(p); else if(/^llama-server(\.exe)?$/i.test(e.name) && !found) found=p; } })(tmpDir);
+      if(found){
+        const dest=path.join(targetDir, job.target);
+        fs.copyFileSync(found, dest);
+        logToDialog('Installed '+dest);
+        // copy dlls
+        (function copyDlls(d){ for(const e of fs.readdirSync(d,{withFileTypes:true})){ const p=path.join(d,e.name); if(e.isDirectory()) copyDlls(p); else if(/\.dll$/i.test(e.name)){ const dd=path.join(targetDir,e.name); if(!fs.existsSync(dd)) try{fs.copyFileSync(p,dd);}catch{} } } })(tmpDir);
+      }
+      try{ fs.rmSync(tmpDir,{recursive:true,force:true}); }catch{}
+    } catch(e){ logToDialog('Download failed for '+job.target+': '+e.message); try{fs.rmSync(path.join(targetDir,'_dl_tmp'),{recursive:true,force:true});}catch{} }
+  }
 }
 function killLlama(){
   if(llamaProc){ try{ llamaProc.kill(); }catch{} llamaProc=null; llamaPort=0; }
@@ -211,8 +310,9 @@ async function ensureLlamaRunning(){
   try{ await fsp.access(modelPath);}catch{ throw new Error('Active model file not found: '+cfg.model); }
   let mmprojPath=null;
   if(cfg.mmproj){ mmprojPath = path.join(MODELS_DIR, cfg.mmproj); try{ await fsp.access(mmprojPath);}catch{ throw new Error('mmproj file not found: '+cfg.mmproj); } }
-  const bin = getLlamaBinary();
-  try{ await fsp.access(bin);}catch{ throw new Error('llama-server binary not found at '+bin+'. Place llama-server.exe (and cuda variant) in bin/. See README.'); }
+  let bin;
+  try{ bin = await ensureLlamaBinaryAvailable(); } catch(e){ throw e; }
+  try{ await fsp.access(bin);}catch{ throw new Error('llama-server binary not found at '+bin+'. Auto-download failed — check internet or run: node scripts/fetch-llama.js'); }
   // pick port
   const net=require('net');
   const getPort=()=> new Promise((res,rej)=>{ const s=net.createServer(); s.listen(0,()=>{ const p=s.address().port; s.close(()=>res(p)); }); s.on('error',rej); });
@@ -222,8 +322,9 @@ async function ensureLlamaRunning(){
   if(mmprojPath) args.push('--mmproj', mmprojPath);
   // prefer cuda binary if gpu present
   let exe = bin;
-  if(bin.endsWith('llama-server.exe') && fs.existsSync(path.join(BIN_DIR,'llama-server-cuda.exe')) && await hasNvidia()){
-    exe = path.join(BIN_DIR,'llama-server-cuda.exe');
+  const cudaBin = findLlamaBinary('llama-server-cuda.exe');
+  if(bin.endsWith('llama-server.exe') && fs.existsSync(cudaBin) && await hasNvidia()){
+    exe = cudaBin;
   }
   llamaProc = spawn(exe, args, { stdio:['ignore','pipe','pipe'] });
   llamaProc.stdout.on('data',d=> console.log('[llama]', d.toString().slice(0,500)));
