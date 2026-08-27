@@ -20,9 +20,15 @@ if not exist "%NODE_EXE%" (
   set "ZIP=%APP%\node.zip"
   set "NODE_URL=https://nodejs.org/dist/v20.18.0/node-v20.18.0-win-x64.zip"
   echo Downloading Node.js v20.18.0...
-  powershell -NoProfile -Command "$url='%NODE_URL%'; $zip='%ZIP%'; Invoke-WebRequest -Uri $url -OutFile $zip"
+  powershell -NoProfile -Command "$url='%NODE_URL%'; $zip='%ZIP%'; Invoke-WebRequest -Uri $url -OutFile $zip; if (Test-Path $zip) { Write-Host 'Download OK: ' $zip } else { exit 1 }"
   if errorlevel 1 (
     echo Download failed. Check internet connection.
+    pause
+    exit /b 1
+  )
+  
+  if not exist "%ZIP%" (
+    echo Download failed - file not found at %ZIP%
     pause
     exit /b 1
   )
@@ -30,7 +36,7 @@ if not exist "%NODE_EXE%" (
   echo Extracting Node.js...
   set "ZIP=%APP%\node.zip"
   set "DEST=%NODE_DIR%"
-  powershell -NoProfile -Command "$zip=$env:ZIP; $dest=$env:DEST; Expand-Archive -Path $zip -DestinationPath $dest -Force"
+  powershell -NoProfile -Command "$zip=$env:ZIP; $dest=$env:DEST; if (Test-Path $zip) { Expand-Archive -Path $zip -DestinationPath $dest -Force; Write-Host 'Extract OK' } else { Write-Host 'ZIP not found: ' $zip; exit 1 }"
   if errorlevel 1 (
     echo Extraction failed.
     if exist "%ZIP%" del "%ZIP%"
