@@ -351,16 +351,25 @@ async function ensureLlamaRunning(){
   const getPort=()=> new Promise((res,rej)=>{ const s=net.createServer(); s.listen(0,()=>{ const p=s.address().port; s.close(()=>res(p)); }); s.on('error',rej); });
   llamaPort = await getPort();
   const { spawn } = require('child_process');
-  const args = ['--model', modelPath, '--host','127.0.0.1','--port',String(llamaPort),'--ctx-size','8192'];
-  if(mmprojPath) args.push('--mmproj', mmprojPath);
-  // Qwen3-VL needs --jinja chat template (see PR #16780, b6887+)
-  if(cfg.model && cfg.model.toLowerCase().includes('qwen3')) args.push('--jinja');
-  // prefer cuda binary if gpu present
-  let exe = bin;
+  // Match FrameForge (much faster): large context, flash-attn, full GPU offload, jinja, no-webui
+  const CONTEXT_SIZE = 32768;
   const cudaBin = findLlamaBinary('llama-server-cuda.exe');
-  if(bin.endsWith('llama-server.exe') && fs.existsSync(cudaBin) && await hasNvidia()){
-    exe = cudaBin;
-  }
+  const useGpu = fs.existsSync(cudaBin) && await hasNvidia();
+  let exe = useGpu ? cudaBin : bin;
+  const args = [
+    '--model', modelPath,
+    '--ctx-size', String(CONTEXT_SIZE),
+    '--port', String(llamaPort),
+    '--host', '127.0.0.1',
+    '--no-webui',
+    '--jinja',
+    '--flash-attn', 'on',
+    '--parallel', '1',
+    '--log-disable',
+  ];
+  if(mmprojPath) args.push('--mmproj', mmprojPath);
+  if(useGpu) args.push('--n-gpu-layers', '99');
+  console.log(`[llama] Using ${useGpu ? 'GPU' : 'CPU'} — exe=${path.basename(exe)} ctx=${CONTEXT_SIZE} ${useGpu ? 'layers=99 flash-attn=on' : ''} mmproj=${mmprojPath ? 'yes' : 'no'}`);
   llamaLog='';
   llamaProc = spawn(exe, args, { stdio:['ignore','pipe','pipe'] });
   llamaProc.stdout.on('data',d=>{ const s=d.toString(); llamaLog+=(s+'\n'); if(llamaLog.length>8000) llamaLog=llamaLog.slice(-8000); console.log('[llama]', s.slice(0,500)); });
