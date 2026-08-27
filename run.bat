@@ -28,7 +28,9 @@ if not exist "%NODE_EXE%" (
   )
   
   echo Extracting Node.js...
-  powershell -NoProfile -Command "$zip='%ZIP%'; $dest='%NODE_DIR%'; Expand-Archive -Path $zip -DestinationPath $dest -Force"
+  set "ZIP=%APP%\node.zip"
+  set "DEST=%NODE_DIR%"
+  powershell -NoProfile -Command "$zip=$env:ZIP; $dest=$env:DEST; Expand-Archive -Path $zip -DestinationPath $dest -Force"
   if errorlevel 1 (
     echo Extraction failed.
     if exist "%ZIP%" del "%ZIP%"
