@@ -74,7 +74,7 @@ if not exist "%APP%\node_modules" (
   if exist "%APP%\node\node_modules\npm\bin\npm-cli.js" set "NPM_CLI=%APP%\node\node_modules\npm\bin\npm-cli.js"
   if not defined NPM_CLI if exist "%APP%\node\npm\bin\npm-cli.js" set "NPM_CLI=%APP%\node\npm\bin\npm-cli.js"
   
-  if not defined NPM_CLI (
+  if "%NPM_CLI%"=="" (
     echo [Ideogram4 Dataset Editor] Portable npm not found at either location.
     echo Checked: %APP%\node\node_modules\npm\bin\npm-cli.js
     echo Checked: %APP%\node\npm\bin\npm-cli.js
@@ -99,7 +99,7 @@ if not exist "%APP%\node_modules" (
   exit /b 1
 )
 if not exist "%APP%\bin\llama-server.exe" (
-  echo [Ideogram4 Dataset Editor] llama-server not found — editor still works, generation needs it.
+  echo [Ideogram4 Dataset Editor] llama-server not found - editor still works, generation needs it.
   echo [Ideogram4 Dataset Editor] Run: node app/scripts/download-llama.mjs and add models to app\models\
 )
 set "PORT=8123"
