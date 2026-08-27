@@ -8,24 +8,20 @@ if not exist "%APP%\server.mjs" (
   pause
   exit /b 1
 )
-set "NODE_EXE="
-if exist "%APP%\node\node.exe" set "NODE_EXE=%APP%\node\node.exe"
-if not defined NODE_EXE (
-  where node >nul 2>&1
-  if !errorlevel! equ 0 (
-    for /f "delims=" %%i in ('where node') do set "NODE_EXE=%%i" & goto :found
-  )
-)
-:found
-if not defined NODE_EXE (
-  echo [Ideogram4 Dataset Editor] Node.js not found.
-  echo  Please install Node.js 20+ from https://nodejs.org
-  echo  OR place a portable Node at app\node\node.exe
-  echo  Download win-x64 zip from https://nodejs.org/dist/latest-v20.x/
+set "NODE_EXE=%APP%\node\node.exe"
+if not exist "%NODE_EXE%" (
+  echo [Ideogram4 Dataset Editor] Portable Node.js not found at %NODE_EXE%
+  echo.
+  echo To make this app fully portable:
+  echo 1. Download Node.js win-x64 zip from https://nodejs.org/dist/latest-v20.x/
+  echo 2. Extract and copy node.exe to: %APP%\node\node.exe
+  echo 3. Also copy the npm folder to: %APP%\node\npm\
+  echo.
+  echo This app requires portable Node.js - no system installation used.
   pause
   exit /b 1
 )
-echo [Ideogram4 Dataset Editor] Using Node: %NODE_EXE%
+echo [Ideogram4 Dataset Editor] Using portable Node: %NODE_EXE%
 "%NODE_EXE%" --version
 if not exist "%APP%\node_modules" (
   echo [Ideogram4 Dataset Editor] Installing dependencies (first run)...
@@ -33,16 +29,18 @@ if not exist "%APP%\node_modules" (
   if exist "%APP%\node\npm\bin\npm-cli.js" (
     "%NODE_EXE%" "%APP%\node\npm\bin\npm-cli.js" install
   ) else (
-    where npm >nul 2>&1
-    if !errorlevel! equ 0 ( call npm install ) else ( "%NODE_EXE%" --run npm install 2>nul )
+    echo [Ideogram4 Dataset Editor] Portable npm not found at %APP%\node\npm\
+    echo Please copy the npm folder from Node.js distribution to: %APP%\node\npm\
+    popd
+    pause
+    exit /b 1
   )
   popd
 )
 if not exist "%APP%\node_modules" (
-  echo [Ideogram4 Dataset Editor] Trying npm from PATH...
-  pushd "%APP%"
-  call npm install
-  popd
+  echo [Ideogram4 Dataset Editor] npm install failed.
+  pause
+  exit /b 1
 )
 if not exist "%APP%\bin\llama-server.exe" (
   echo [Ideogram4 Dataset Editor] llama-server not found — editor still works, generation needs it.
