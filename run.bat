@@ -8,19 +8,49 @@ if not exist "%APP%\server.mjs" (
   pause
   exit /b 1
 )
-set "NODE_EXE=%APP%\node\node.exe"
+
+set "NODE_DIR=%APP%\node"
+set "NODE_EXE=%NODE_DIR%\node.exe"
+set "NODE_URL=https://nodejs.org/dist/v20.18.0/node-v20.18.0-win-x64.zip"
+
 if not exist "%NODE_EXE%" (
-  echo [Ideogram4 Dataset Editor] Portable Node.js not found at %NODE_EXE%
-  echo.
-  echo To make this app fully portable:
-  echo 1. Download Node.js win-x64 zip from https://nodejs.org/dist/latest-v20.x/
-  echo 2. Extract and copy node.exe to: %APP%\node\node.exe
-  echo 3. Also copy the npm folder to: %APP%\node\npm\
-  echo.
-  echo This app requires portable Node.js - no system installation used.
+  echo [Ideogram4 Dataset Editor] Portable Node.js not found. Downloading...
+  if not exist "%NODE_DIR%" mkdir "%NODE_DIR%"
+  
+  set "ZIP=%APP%\node.zip"
+  echo Downloading Node.js v20.18.0...
+  powershell -NoProfile -Command "Invoke-WebRequest -Uri '%NODE_URL%' -OutFile '%ZIP%'"
+  if errorlevel 1 (
+    echo Download failed. Check internet connection.
+    pause
+    exit /b 1
+  )
+  
+  echo Extracting Node.js...
+  powershell -NoProfile -Command "Expand-Archive -Path '%ZIP%' -DestinationPath '%NODE_DIR%' -Force"
+  if errorlevel 1 (
+    echo Extraction failed.
+    del "%ZIP%"
+    pause
+    exit /b 1
+  )
+  
+  rem Move contents from node-v20.18.0-win-x64 subfolder up to node dir
+  for /d %%d in ("%NODE_DIR%\node-v*-win-x64") do (
+    robocopy "%%d" "%NODE_DIR%" /E /MOVE >nul
+    rmdir /s /q "%%d"
+  )
+  
+  del "%ZIP%"
+  echo Node.js installed to %NODE_DIR%
+)
+
+if not exist "%NODE_EXE%" (
+  echo [Ideogram4 Dataset Editor] Node.js extraction failed - node.exe not found.
   pause
   exit /b 1
 )
+
 echo [Ideogram4 Dataset Editor] Using portable Node: %NODE_EXE%
 "%NODE_EXE%" --version
 if not exist "%APP%\node_modules" (
