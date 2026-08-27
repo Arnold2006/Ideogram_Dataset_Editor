@@ -8,12 +8,31 @@ let sharp;
 try { sharp = require('sharp'); } catch(e) { console.warn('sharp not available', e); }
 
 const SUPPORTED_IMG = new Set(['.jpg','.jpeg','.png','.webp','.bmp','.gif']);
+// Resolve app root that survives rebuilds and works for both dev and portable
+function getAppRoot() {
+  if (!app.isPackaged) return path.join(__dirname, '..');
+  const exeDir = path.dirname(app.getPath('exe'));
+  // If running from out/win-unpacked inside repo (has package.json two levels up), use repo root so models survive rebuild
+  const repoRoot = path.join(exeDir, '..', '..');
+  try {
+    if (fs.existsSync(path.join(repoRoot, 'package.json')) && fs.existsSync(path.join(repoRoot, 'models'))) {
+      return repoRoot;
+    }
+    // Also check if repoRoot has models folder even without .gitkeep
+    if (fs.existsSync(path.join(repoRoot, 'package.json'))) {
+      return repoRoot;
+    }
+  } catch {}
+  // Standalone portable (unzipped to Desktop etc.) — models next to exe
+  return exeDir;
+}
+const APP_ROOT = getAppRoot();
 const RESOURCES_DIR = app.isPackaged ? path.join(path.dirname(app.getPath('exe')), 'resources', 'app') : path.join(__dirname, '..');
-const CONFIG_DIR = path.join(app.isPackaged ? path.dirname(app.getPath('exe')) : __dirname + '/..', 'config');
-const MODELS_DIR = path.join(app.isPackaged ? path.dirname(app.getPath('exe')) : __dirname + '/..', 'models');
+const CONFIG_DIR = path.join(APP_ROOT, 'config');
+const MODELS_DIR = path.join(APP_ROOT, 'models');
 const PROMPTS_DIR = app.isPackaged ? path.join(RESOURCES_DIR, 'prompts') : path.join(__dirname, '..', 'prompts');
 const BIN_CANDIDATES = app.isPackaged
-  ? [path.join(path.dirname(app.getPath('exe')), 'bin'), path.join(RESOURCES_DIR, 'bin'), path.join(__dirname, '..', 'bin')]
+  ? [path.join(APP_ROOT, 'bin'), path.join(RESOURCES_DIR, 'bin'), path.join(__dirname, '..', 'bin'), path.join(path.dirname(app.getPath('exe')), 'bin')]
   : [path.join(__dirname, '..', 'bin')];
 const BIN_DIR = BIN_CANDIDATES[0];
 
@@ -22,6 +41,19 @@ let llamaProc = null;
 let llamaPort = 0;
 let activeCancel = null;
 let llamaLog = '';
+// FrameForge fast path — loaded from app/src of https://github.com/Arnold2006/FrameForge
+let frameforgePrompt, frameforgeGenSchema, frameforgeNormalize, frameforgeValidate;
+try {
+  const promptMod = require('./frameforge/prompt');
+  const genSchemaMod = require('./frameforge/generation-schema');
+  const normMod = require('./frameforge/normalize');
+  const valMod = require('./frameforge/validate');
+  frameforgePrompt = promptMod;
+  frameforgeGenSchema = genSchemaMod.GENERATION_SCHEMA;
+  frameforgeNormalize = normMod.normalizeCaption;
+  frameforgeValidate = valMod.validateCaption;
+  console.log('[frameforge] loaded prompt + schema (5s path)');
+} catch(e) { console.warn('[frameforge] failed to load', e.message); }
 
 function createSplash(){
   splash = new BrowserWindow({ width:380, height:260, frame:false, transparent:true, alwaysOnTop:true, center:true, resizable:false, show:true, skipTaskbar:false });
@@ -56,7 +88,36 @@ app.on('activate', ()=>{ if(BrowserWindow.getAllWindows().length===0) createWind
 
 async function ensureDirs(){
   for(const d of [CONFIG_DIR, MODELS_DIR, PROMPTS_DIR, BIN_DIR]){ try{ await fsp.mkdir(d,{recursive:true}); }catch{} }
+  // Migrate from old out/win-unpacked/* locations (pre-fix) to new APP_ROOT/* so uploads survive rebuilds
+  if(app.isPackaged){
+    const exeDir = path.dirname(app.getPath('exe'));
+    const migrations = [
+      [path.join(exeDir, 'models'), MODELS_DIR],
+      [path.join(exeDir, 'bin'), BIN_DIR],
+      [path.join(exeDir, 'config'), CONFIG_DIR],
+    ];
+    for(const [oldDir, newDir] of migrations){
+      try{
+        if(oldDir===newDir) continue;
+        if(!fs.existsSync(oldDir)) continue;
+        const oldFiles = await fsp.readdir(oldDir).catch(()=>[]);
+        const newFiles = await fsp.readdir(newDir).catch(()=>[]);
+        const oldHasData = oldFiles.some(f=>!f.startsWith('.') && f!=='.gitkeep');
+        const newHasData = newFiles.some(f=>!f.startsWith('.') && f!=='.gitkeep');
+        if(oldHasData && !newHasData){
+          console.log(`[migrate] moving ${oldDir} -> ${newDir}`);
+          for(const f of oldFiles){
+            if(f==='.gitkeep') continue;
+            const src=path.join(oldDir,f), dst=path.join(newDir,f);
+            try{ await fsp.copyFile(src,dst); console.log(`[migrate] copied ${f}`); }catch(e){ console.warn(`[migrate] copy failed ${f}:`,e.message); }
+          }
+        }
+      }catch(e){ console.warn('[migrate] failed',e.message); }
+    }
+  }
   try{ await fsp.writeFile(path.join(MODELS_DIR,'.gitkeep'),'',{flag:'wx'}); }catch{}
+  try{ await fsp.writeFile(path.join(CONFIG_DIR,'.gitkeep'),'',{flag:'wx'}); }catch{}
+  try{ await fsp.writeFile(path.join(BIN_DIR,'.gitkeep'),'',{flag:'wx'}); }catch{}
   // bootstrap default prompt copy if config missing
   try{
     const cfgPrompt = path.join(CONFIG_DIR,'prompt.txt');
@@ -144,15 +205,38 @@ ipcMain.handle('select-model-file', async()=>{
   const r=await dialog.showOpenDialog(win,{properties:['openFile'],filters:[{name:'GGUF',extensions:['gguf']}]}); if(r.canceled||!r.filePaths[0]) return null; return r.filePaths[0];
 });
 ipcMain.handle('upload-model', async(_e, srcPath)=>{
-  if(!srcPath) throw new Error('No file');
+  if(!srcPath) throw new Error('No file selected');
+  console.log('[models] upload request:', srcPath, '->', MODELS_DIR);
   await fsp.mkdir(MODELS_DIR,{recursive:true});
   const base = path.basename(srcPath);
   const dest = path.join(MODELS_DIR, base);
-  // stream copy with progress not needed for now
-  await fsp.copyFile(srcPath, dest);
-  // validate magic
-  const fd=await fsp.open(dest,'r'); const buf=Buffer.alloc(4); await fd.read(buf,0,4,0); await fd.close();
-  if(!ggufMagicValid(buf)) throw new Error('Not a GGUF file (magic mismatch)');
+  // Validate source exists and is readable
+  try { await fsp.access(srcPath); } catch(e){ throw new Error('Source file not accessible: '+e.message); }
+  // For large gguf (up to 10GB), use streaming copy to avoid ENOMEM and show progress
+  await new Promise((resolve, reject)=>{
+    const rs = fs.createReadStream(srcPath);
+    const ws = fs.createWriteStream(dest);
+    let copied=0;
+    rs.on('error', reject);
+    ws.on('error', reject);
+    ws.on('finish', resolve);
+    rs.on('data', chunk=>{
+      copied+=chunk.length;
+      // throttle log every 500MB
+      if(copied % (500*1024*1024) < chunk.length) console.log(`[models] copying ${base}: ${(copied/1024/1024).toFixed(0)} MB`);
+    });
+    rs.pipe(ws);
+  });
+  // validate magic after copy
+  let fd;
+  try{
+    fd=await fsp.open(dest,'r'); const buf=Buffer.alloc(4); await fd.read(buf,0,4,0); await fd.close(); fd=null;
+    if(!ggufMagicValid(buf)){
+      try{ await fsp.unlink(dest); }catch{}
+      throw new Error('Not a GGUF file (magic mismatch — file does not start with GGUF)');
+    }
+  } finally { if(fd) try{await fd.close();}catch{} }
+  console.log('[models] saved to', dest, 'size', (await fsp.stat(dest)).size);
   return { name: base, path: dest };
 });
 ipcMain.handle('delete-model', async(_e,name)=>{
@@ -421,17 +505,128 @@ function validateSchema(obj){
     if(el.type!=='obj'&&el.type!=='text') throw new Error('element type must be obj or text');
     if(!Array.isArray(el.bbox)||el.bbox.length!==4) throw new Error('bbox must be [ymin,xmin,ymax,xmax]');
     for(const v of el.bbox){ if(!Number.isInteger(v)||v<0||v>1000) throw new Error('bbox values must be integers 0..1000'); }
-    if(el.bbox[0]>=el.bbox[2]||el.bbox[1]>=el.bbox[3]){ // allow 0,0,0,0 as "unknown"
+    if(el.bbox[0]>=el.bbox[2]||el.bbox[1]>=el.bbox[3]){
       if(!(el.bbox[0]===0&&el.bbox[1]===0&&el.bbox[2]===0&&el.bbox[3]===0)) throw new Error('bbox ymin<xmax etc');
     }
   }
-  // strip unknown top-level keys
   const allowedTop=new Set(['high_level_description','style_description','compositional_deconstruction']);
   for(const k of Object.keys(obj)) if(!allowedTop.has(k)) delete obj[k];
   return obj;
 }
-
-async function callLlamaChat(imagePath, systemPrompt){
+// — FrameForge fast path (5s) — uses SYSTEM_PROMPT+FEW_SHOT, json_schema strict, streaming
+function buildFrameForgeMessages(description, imageBase64, lastErrors, aspectRatio="1:1"){
+  if(!frameforgePrompt) return null;
+  const { SYSTEM_PROMPT, FEW_SHOT } = frameforgePrompt;
+  const [arW, arH] = aspectRatio.split(":").map(Number);
+  const gridW = arW >= arH ? 1000 : Math.round(1000 * arW / arH);
+  const gridH = arH >= arW ? 1000 : Math.round(1000 * arH / arW);
+  const arNote = `\n\nTarget aspect ratio: ${aspectRatio} (bbox grid is ${gridW}x${gridH}, x in [0,${gridW}], y in [0,${gridH}]). Place and size all bboxes to suit this canvas shape.`;
+  const styleNote = `\n\nYou MUST always include the "style_description" object in your output. It is required, never optional. Choose either the photograph variant (with fields: aesthetics, lighting, photo, medium="photograph", color_palette) or the art variant (with fields: aesthetics, lighting, medium, art_style, color_palette). Always populate all fields with rich, specific values. Never omit style_description.`;
+  const sysPrompt = SYSTEM_PROMPT + styleNote + arNote;
+  const messages = [{ role: "system", content: sysPrompt }];
+  for(const [user, response] of FEW_SHOT){
+    messages.push({ role: "user", content: user });
+    messages.push({ role: "assistant", content: response });
+  }
+  const errorSuffix = lastErrors.length>0 ? "\n\n(Your previous answer had these problems, fix them: " + lastErrors.join("; ") + ")" : "";
+  let userContent;
+  if(imageBase64){
+    const base64Data = imageBase64.replace(/^data:[^;]+;base64,/, "");
+    userContent = [
+      { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
+      { type: "text", text: (description ? `Analyse this image and use it as the subject. Additional context: ${description}` : "Analyse this image carefully and generate a detailed Ideogram 4 JSON prompt for it.") + errorSuffix }
+    ];
+  } else {
+    userContent = (description || "Generate an Ideogram 4 JSON prompt.") + errorSuffix;
+  }
+  messages.push({ role: "user", content: userContent });
+  return messages;
+}
+async function callLlamaServerFrameForge(messages, onChunk){
+  const port = await ensureLlamaRunning();
+  const body = JSON.stringify({
+    model: "local",
+    messages,
+    temperature: 0.7,
+    max_tokens: 3000,
+    stream: true,
+    response_format: { type: "json_schema", json_schema: { name: "ideogram_prompt", schema: frameforgeGenSchema, strict: true } }
+  });
+  const controller = new AbortController();
+  activeCancel = controller;
+  const res = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+    signal: controller.signal
+  });
+  if(!res.ok){
+    const err = await res.text().catch(()=>String(res.status));
+    activeCancel=null;
+    throw new Error(`llama-server error ${res.status}: ${err.slice(0,600)}`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer="", fullText="";
+  while(true){
+    const { done, value } = await reader.read();
+    if(done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop();
+    for(const line of lines){
+      if(!line.startsWith("data: ")) continue;
+      const data = line.slice(6).trim();
+      if(data === "[DONE]") continue;
+      try{
+        const evt = JSON.parse(data);
+        const chunk = evt.choices?.[0]?.delta?.content ?? "";
+        if(chunk){ fullText += chunk; if(onChunk) onChunk(chunk); }
+      }catch{}
+    }
+  }
+  activeCancel=null;
+  return fullText;
+}
+async function generateWithFrameForge(imagePath, customSystemPrompt){
+  const port = await ensureLlamaRunning();
+  // read image as base64 data url (like FrameForge)
+  const imgBuf = await fsp.readFile(imagePath);
+  const ext = path.extname(imagePath).toLowerCase();
+  const mime = ext==='.png'?'image/png': ext==='.webp'?'image/webp': ext==='.gif'?'image/gif':'image/jpeg';
+  const b64 = imgBuf.toString('base64');
+  const dataUrl = `data:${mime};base64,${b64}`;
+  // Use FrameForge pipeline if available, else fallback to custom prompt
+  if(frameforgePrompt && frameforgeGenSchema && frameforgeNormalize && frameforgeValidate){
+    const MAX_ATTEMPTS=2;
+    let lastErrors=[];
+    for(let attempt=1; attempt<=MAX_ATTEMPTS; attempt++){
+      const messages = buildFrameForgeMessages("", dataUrl, lastErrors, "1:1");
+      let text;
+      try{
+        text = await callLlamaServerFrameForge(messages, ()=>{});
+      } catch(err){
+        // fallback to non-schema if json_schema not supported by this build
+        if(/json_schema|response_format/i.test(String(err.message))){
+          console.warn('[frameforge] json_schema not supported, falling back to plain');
+          return callLlamaChatFallback(imagePath, customSystemPrompt);
+        }
+        throw err;
+      }
+      let raw;
+      try{ raw=JSON.parse(text); } catch{ lastErrors=["output was not parseable JSON"]; continue; }
+      const normalized = frameforgeNormalize(raw);
+      if(!normalized.ok){ lastErrors=[normalized.reason]; continue; }
+      const { valid, errors } = frameforgeValidate(normalized.value);
+      if(!valid){ lastErrors=errors; continue; }
+      return normalized.value;
+    }
+    throw new Error(`Could not produce a valid Ideogram caption after ${MAX_ATTEMPTS} attempts. Last: ${lastErrors.join('; ')}`);
+  }
+  // fallback
+  return callLlamaChatFallback(imagePath, customSystemPrompt);
+}
+async function callLlamaChatFallback(imagePath, systemPrompt){
   const port = await ensureLlamaRunning();
   const imgBuf = await fsp.readFile(imagePath);
   const ext = path.extname(imagePath).toLowerCase();
@@ -465,18 +660,25 @@ async function callLlamaChat(imagePath, systemPrompt){
   let text = stripFences(String(content));
   let parsed;
   try{ parsed=JSON.parse(text); }catch(e){
-    // try to extract first {...}
     const m=text.match(/\{[\s\S]*\}/);
     if(m){ try{ parsed=JSON.parse(m[0]); }catch{} }
     if(!parsed) throw new Error('Model did not return valid JSON. Raw: '+text.slice(0,800));
   }
   return validateSchema(parsed);
 }
+async function callLlamaChat(imagePath, systemPrompt){
+  // Prefer FrameForge fast path (5s) — falls back to plain if needed
+  try{
+    if(frameforgePrompt) return await generateWithFrameForge(imagePath, systemPrompt);
+  } catch(e){
+    console.warn('[frameforge] fast path failed, fallback:', e.message);
+  }
+  return callLlamaChatFallback(imagePath, systemPrompt);
+}
 
 ipcMain.handle('generate-one', async(_e, opts)=>{
   const { imagePath, folder, base } = opts||{};
   const p = imagePath || (folder&&base? path.join(folder, base + path.extname((await fsp.readdir(folder)).find(n=>n.startsWith(base+'.'))||'')) : null);
-  // resolve image path: if opts has imagePath use it, else try to find image for base
   let imgPath = opts.imagePath;
   if(!imgPath && opts.folder && opts.base){
     const files=await fsp.readdir(opts.folder);
@@ -485,8 +687,12 @@ ipcMain.handle('generate-one', async(_e, opts)=>{
     imgPath = path.join(opts.folder, hit);
   }
   if(!imgPath) throw new Error('No imagePath');
-  const prompt = await (async()=>{ try{ const t=await fsp.readFile(path.join(CONFIG_DIR,'prompt.txt'),'utf8'); if(t.trim().length>20) return t; }catch{} return await fsp.readFile(path.join(PROMPTS_DIR,'ideogram4_default.txt'),'utf8'); })();
-  const json = await callLlamaChat(imgPath, prompt);
+  // Use FrameForge pipeline directly (ignores custom prompt — FrameForge prompt is optimized for speed/quality).
+  // If user has a custom prompt in config/prompt.txt, it will be used as fallback only.
+  const customPrompt = await (async()=>{ try{ const t=await fsp.readFile(path.join(CONFIG_DIR,'prompt.txt'),'utf8'); if(t.trim().length>20) return t; }catch{} return null; })();
+  // If custom prompt exists and FrameForge is disabled, use it; otherwise FrameForge fast path uses its own SYSTEM_PROMPT.
+  // We pass customPrompt for fallback.
+  const json = await generateWithFrameForge(imgPath, customPrompt || await fsp.readFile(path.join(PROMPTS_DIR,'ideogram4_default.txt'),'utf8').catch(()=>customPrompt));
   return json;
 });
 
