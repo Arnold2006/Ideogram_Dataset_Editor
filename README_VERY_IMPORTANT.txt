@@ -23,11 +23,11 @@ Thumbnails appear in the left 3-col grid. Click a thumb to edit on the right.
 Arrow keys navigate (auto-saves current before leaving), Ctrl+S saves, Ctrl+B toggles full-width bbox edit.
 AI drafts are in-memory until you Save — missing .json are NOT created on disk until Save/Generate->Save.
 
-RECOMMENDED WAY TO UPDATE:
+RECOMMENDED WAY TO UPDATE (all rebuild and start the app after pulling):
 
-  update\update.bat                          — git pull (pygit2 or plain git) + npm install
-  update\update_and_rebuild.bat              — pull + npm install + npm run dist
-  update\update_and_python_dependencies.bat  — pull + reinstall python_embeded deps (rare; only if deps broken)
+  update\update.bat                          — git pull + rebuild (npm run dist) + start app
+  update\update_and_rebuild.bat              — same (kept for ComfyUI parity)
+  update\update_and_python_dependencies.bat  — pull + reinstall Node/Python deps + rebuild + start app
 
 TO SHARE MODELS BETWEEN MACHINES:
 Copy the models\ folder or point the app at a shared drive. The app never auto-downloads models.
