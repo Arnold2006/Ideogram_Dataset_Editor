@@ -66,13 +66,18 @@ if not exist "%NODE_EXE%" (
 
 echo [Ideogram4 Dataset Editor] Using portable Node: %NODE_EXE%
 "%NODE_EXE%" --version
+echo DEBUG: Past version check
 if not exist "%APP%\node_modules" (
+  echo DEBUG: node_modules not found, entering install block
   echo [Ideogram4 Dataset Editor] Installing dependencies (first run)...
   pushd "%APP%"
+  echo DEBUG: pushd done, APP=%APP%
   
   set "NPM_CLI="
   if exist "%APP%\node\node_modules\npm\bin\npm-cli.js" set "NPM_CLI=%APP%\node\node_modules\npm\bin\npm-cli.js"
+  echo DEBUG: NPM_CLI after first check=%NPM_CLI%
   if not defined NPM_CLI if exist "%APP%\node\npm\bin\npm-cli.js" set "NPM_CLI=%APP%\node\npm\bin\npm-cli.js"
+  echo DEBUG: NPM_CLI after second check=%NPM_CLI%
   
   if "%NPM_CLI%"=="" (
     echo [Ideogram4 Dataset Editor] Portable npm not found at either location.
@@ -92,6 +97,7 @@ if not exist "%APP%\node_modules" (
     exit /b 1
   )
   popd
+  echo DEBUG: npm install block complete
 )
 if not exist "%APP%\node_modules" (
   echo [Ideogram4 Dataset Editor] npm install failed - node_modules not created.
