@@ -5,6 +5,7 @@ export function initCanvas(state, { markDirty }){
 
   const canvas=document.getElementById('bbox-canvas');
   canvas.addEventListener('mousedown', onMouseDown);
+  canvas.addEventListener('dblclick', onDblClick);
   canvas.addEventListener('mousemove', e=>{ if(!dragState) onMouseMove(e); });
   canvas.addEventListener('mouseleave', ()=>{ if(!dragState) canvas.style.cursor='default'; });
 
@@ -98,15 +99,10 @@ export function initCanvas(state, { markDirty }){
       const r=hitAreas.boxes[i];
       if(r && pointInRect(p,r)){
         e.preventDefault();
-        // select/highlight
+        // select/highlight — single click only moves, double-click jumps to element section
         state.selectedIdx=i;
         document.querySelectorAll('.el-card').forEach((c,idx)=> c.classList.toggle('el-highlight', idx===i));
         drawBboxes(i);
-        const card=document.getElementById('elcard-'+i);
-        if(card) card.scrollIntoView({block:'nearest',behavior:'smooth'});
-        // ensure its body open
-        const body=document.getElementById('elbody-'+i);
-        if(body && !body.classList.contains('open')) body.classList.add('open');
         const {bx,by}=screenToBboxPt(p.x,p.y,m);
         dragState={mode:'move', idx:i, startBx:bx, startBy:by, orig:[...els[i].bbox]};
         document.body.style.userSelect='none';
@@ -119,6 +115,33 @@ export function initCanvas(state, { markDirty }){
       state.selectedIdx=null;
       document.querySelectorAll('.el-card').forEach(c=> c.classList.remove('el-highlight'));
       drawBboxes(null);
+    }
+  }
+  function onDblClick(e){
+    if(!state.dataset.length) return;
+    const m=imgMetrics(); if(!m) return;
+    const p=canvasPoint(e);
+    const els=(state.dataset[state.current].data.compositional_deconstruction||{}).elements||[];
+    for(let i=els.length-1;i>=0;i--){
+      const r=hitAreas.boxes[i];
+      if(r && pointInRect(p,r)){
+        e.preventDefault();
+        state.selectedIdx=i;
+        document.querySelectorAll('.el-card').forEach((c,idx)=> c.classList.toggle('el-highlight', idx===i));
+        drawBboxes(i);
+        const card=document.getElementById('elcard-'+i);
+        if(card) card.scrollIntoView({block:'nearest',behavior:'smooth'});
+        const body=document.getElementById('elbody-'+i);
+        if(body && !body.classList.contains('open')) body.classList.add('open');
+        // also ensure elements section is open
+        const secBody=document.getElementById('body-elements');
+        if(secBody && !secBody.classList.contains('open')){
+          secBody.classList.add('open');
+          const caret=document.getElementById('caret-elements');
+          if(caret) caret.classList.add('open');
+        }
+        return;
+      }
     }
   }
   function onMouseMove(e){
