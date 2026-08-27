@@ -34,7 +34,14 @@
       "prompts/**/*",
       "config/**/*",
       "models/.gitkeep",
-      "bin/**/*"
+      "bin/**/*",
+      "run.bat",
+      "run_cpu.bat",
+      "run_nvidia_gpu.bat",
+      "README_VERY_IMPORTANT.txt",
+      "update/**/*",
+      "app/**/*",
+      "python_embeded/**/*"
     ],
     "directories": {
       "buildResources": "build",

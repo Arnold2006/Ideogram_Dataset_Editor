@@ -1,6 +1,9 @@
 node_modules
 dist
 out
+# keep portable in repo for update/ zip distribution — out is still gitignored by default,
+# uncomment next line if you want to commit the portable:
+# !out/win-unpacked
 models/*.gguf
 models/active.json
 config/prompt.txt
@@ -8,6 +11,10 @@ config/settings.json
 bin/llama-server*
 bin/*.dll
 bin/MicrosoftEdgeWebview2Setup.exe
+update/current_requirements.txt
+update/current_package_lock.txt
+python_embeded/
+!python_embeded/README.txt
 .env
 .DS_Store
 Thumbs.db
