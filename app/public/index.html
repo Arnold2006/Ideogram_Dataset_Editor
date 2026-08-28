@@ -80,6 +80,9 @@
   .element-row input, .element-row textarea { font: inherit; font-size: 12px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--fg); }
   .element-row .bbox-inputs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
   .element-row .el-actions { display: flex; flex-direction: column; gap: 4px; }
+  .structured-editor { display: none; flex-direction: column; gap: 10px; padding: 12px; border-top: 1px solid var(--border); background: var(--card); max-height: 380px; overflow-y: auto; }
+  .structured-editor.show { display: flex; }
+  .structured-editor .section-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 6px 0 2px; }
   .meta-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
   .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 3px 8px; }
   .badge.valid { color: var(--green); background: var(--green-bg); }
@@ -208,6 +211,24 @@
       </div>
       <div class="layout-controls" id="layoutControls"><button id="addBoxBtn">+ Add Element</button></div>
       <div class="layout-hint" id="layoutHint">drag to move · pull corner to resize · click × to delete — bbox overlaid on preview (bigger)</div>
+    </div>
+    <div id="structuredEditor" class="structured-editor" style="display:none">
+      <div class="section-title">high_level_description</div>
+      <textarea id="fieldHighLevel" rows="2" placeholder="one or two sentences summarizing entire image"></textarea>
+      <div class="section-title">style_description</div>
+      <input id="fieldAesthetics" placeholder="aesthetics (comma-separated)">
+      <input id="fieldLighting" placeholder="lighting">
+      <input id="fieldMedium" placeholder="medium (photograph, illustration, 3d_render, etc)">
+      <input id="fieldPhoto" placeholder="photo (camera/lens) — for photograph medium">
+      <input id="fieldArtStyle" placeholder="art_style — for non-photograph medium">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <span style="font-size:11px;color:var(--muted)">color_palette:</span>
+        <span id="fieldStylePalette" style="display:flex;gap:4px;flex-wrap:wrap"></span>
+        <button id="addStyleColor" style="font-size:11px;padding:2px 6px;border:1px dashed var(--border);border-radius:999px;background:transparent;cursor:pointer">+ color</button>
+      </div>
+      <div class="section-title">compositional_deconstruction.background</div>
+      <textarea id="fieldBackground" rows="2" placeholder="environment/setting behind elements"></textarea>
+      <div class="section-title">elements — edit below (bboxes draggable on preview)</div>
     </div>
     <div id="elementList" class="element-list" style="display:none"></div>
     <div class="editor-body">
@@ -501,7 +522,7 @@ async function loadCaptionForSelected() {
 editArea.addEventListener("input", () => {
   isDirty=true;
   if (mode==="ideogram") {
-    try { currentJson = JSON.parse(editArea.value); renderJsonPreview(); setBadge("valid","✓ Valid JSON (unsaved)"); }
+    try { currentJson = JSON.parse(editArea.value); renderJsonPreview(); renderStructuredEditor(); renderElementList(); setBadge("valid","✓ Valid JSON (unsaved)"); }
     catch { currentJson=null; setBadge("invalid","Invalid JSON"); }
   } else {
     setBadge("muted", "plain text (unsaved)");
@@ -525,14 +546,14 @@ function setBadge(cls,text){ badge.className="badge "+cls; badge.textContent=tex
 function updateCanvasVisibility(){
   const isIdeogram = mode==="ideogram" && currentJson && currentJson.compositional_deconstruction && Array.isArray(currentJson.compositional_deconstruction.elements);
   const elList = document.getElementById("elementList");
-  // canvas is now overlay inside previewWrap — toggle visibility
   if (canvas) canvas.style.display = isIdeogram ? "block" : "none";
   const lc = document.getElementById("layoutControls");
   if (lc) lc.style.display = isIdeogram ? "flex" : "none";
   const lh = document.getElementById("layoutHint");
   if (lh) lh.style.display = isIdeogram ? "block" : "none";
   if (elList) elList.style.display = isIdeogram ? "flex" : "none";
-  if (isIdeogram) { renderLayout(); renderElementList(); }
+  if (structuredEditor) structuredEditor.style.display = isIdeogram ? "flex" : "none";
+  if (isIdeogram) { renderLayout(); renderElementList(); renderStructuredEditor(); }
   else { canvas.innerHTML=""; if(elList) elList.innerHTML=""; }
 }
 function renderElementList(){
@@ -598,6 +619,81 @@ function renderElementList(){
   elList.querySelectorAll("[data-add-color]").forEach(btn=> btn.addEventListener("click", e=>{
     const idx=Number(e.target.dataset.addColor); const el=currentJson.compositional_deconstruction.elements[idx]; if(!el.color_palette) el.color_palette=[]; if(el.color_palette.length>=5) return; el.color_palette.push("#FFFFFF"); renderElementList(); renderLayout(); editArea.value=JSON.stringify(currentJson,null,2); renderJsonPreview(); isDirty=true;
   }));
+}
+
+// ── structured editor (all json sections) ─────────────────────────────────
+const fieldHighLevel = document.getElementById("fieldHighLevel"), fieldAesthetics = document.getElementById("fieldAesthetics"), fieldLighting = document.getElementById("fieldLighting"), fieldMedium = document.getElementById("fieldMedium"), fieldPhoto = document.getElementById("fieldPhoto"), fieldArtStyle = document.getElementById("fieldArtStyle"), fieldBackground = document.getElementById("fieldBackground"), fieldStylePalette = document.getElementById("fieldStylePalette"), structuredEditor = document.getElementById("structuredEditor");
+let suppressStructured = false;
+function renderStructuredEditor(){
+  if (!currentJson || mode!=="ideogram") { structuredEditor.classList.remove("show"); return; }
+  structuredEditor.classList.add("show");
+  suppressStructured = true;
+  fieldHighLevel.value = currentJson.high_level_description || "";
+  const sd = currentJson.style_description || {};
+  fieldAesthetics.value = sd.aesthetics || "";
+  fieldLighting.value = sd.lighting || "";
+  fieldMedium.value = sd.medium || "";
+  fieldPhoto.value = sd.photo || "";
+  fieldArtStyle.value = sd.art_style || "";
+  // show/hide photo vs art_style based on medium
+  const isPhoto = (sd.medium||"").toLowerCase()==="photograph";
+  fieldPhoto.style.display = isPhoto ? "" : "none";
+  fieldPhoto.previousElementSibling.placeholder = isPhoto ? "photo (camera/lens)" : "photo (hidden unless medium=photograph)";
+  fieldArtStyle.style.display = isPhoto ? "none" : "";
+  fieldBackground.value = currentJson.compositional_deconstruction?.background || "";
+  // style palette
+  fieldStylePalette.innerHTML="";
+  (sd.color_palette||[]).forEach((hex,pi)=>{
+    const sw=document.createElement("span");
+    sw.style.cssText="width:18px;height:18px;border-radius:50%;border:1px solid var(--border);background:"+hex+";position:relative;overflow:hidden;cursor:pointer;display:inline-block";
+    sw.title=hex;
+    const inp=document.createElement("input"); inp.type="color"; inp.value=hex; inp.style.cssText="position:absolute;top:-4px;left:-4px;width:26px;height:26px;border:none;opacity:0.01;cursor:pointer";
+    inp.addEventListener("input", e=>{ sd.color_palette[pi]=e.target.value.toUpperCase(); sw.style.background=e.target.value; syncFromStructured(); });
+    sw.appendChild(inp);
+    sw.addEventListener("contextmenu", e=>{ e.preventDefault(); sd.color_palette.splice(pi,1); renderStructuredEditor(); syncFromStructured(); });
+    fieldStylePalette.appendChild(sw);
+  });
+  suppressStructured=false;
+}
+function syncFromStructured(){
+  if (suppressStructured || !currentJson) return;
+  currentJson.high_level_description = fieldHighLevel.value;
+  if (!currentJson.style_description) currentJson.style_description={};
+  const sd=currentJson.style_description;
+  sd.aesthetics = fieldAesthetics.value;
+  sd.lighting = fieldLighting.value;
+  sd.medium = fieldMedium.value || sd.medium;
+  if ((sd.medium||"").toLowerCase()==="photograph") {
+    sd.photo = fieldPhoto.value;
+    delete sd.art_style;
+    sd.medium="photograph";
+  } else {
+    sd.art_style = fieldArtStyle.value;
+    delete sd.photo;
+  }
+  // color_palette already mutated via swatches
+  if (!currentJson.compositional_deconstruction) currentJson.compositional_deconstruction={ background:"", elements:[] };
+  currentJson.compositional_deconstruction.background = fieldBackground.value;
+  // bbox is handled via elementList / drag — keep as is
+  editArea.value = JSON.stringify(currentJson,null,2);
+  renderJsonPreview();
+  isDirty=true;
+}
+// bind structured inputs
+[fieldHighLevel, fieldAesthetics, fieldLighting, fieldMedium, fieldPhoto, fieldArtStyle, fieldBackground].forEach(el=> el && el.addEventListener("input", syncFromStructured));
+document.getElementById("addStyleColor")?.addEventListener("click", ()=>{
+  if (!currentJson || !currentJson.style_description) return;
+  if (!currentJson.style_description.color_palette) currentJson.style_description.color_palette=[];
+  if (currentJson.style_description.color_palette.length>=8) return;
+  currentJson.style_description.color_palette.push("#FFFFFF");
+  renderStructuredEditor(); syncFromStructured();
+});
+// when dragging bbox, also update structured element list bbox inputs live
+function syncElementListBbox(idx, bbox){
+  document.querySelectorAll(`[data-idx="${idx}"][data-bbox]`).forEach(inp=>{
+    const p=Number(inp.dataset.bbox);
+    inp.value = bbox[p];
+  });
 }
 
 // ── save / copy / delete ───────────────────────────────────────────────────
@@ -751,6 +847,7 @@ function attachDrag(d,handle,el){
     if(mode==="move"){ const bh=start[2]-start[0], bw=start[3]-start[1]; const y0=clamp(start[0]+dy,0,1000-bh), x0=clamp(start[1]+dx,0,1000-bw); el.bbox=[y0,x0,y0+bh,x0+bw]; }
     else { const y1=clamp(start[2]+dy,start[0]+10,1000), x1=clamp(start[3]+dx,start[1]+10,1000); el.bbox=[start[0],start[1],y1,x1]; }
     positionBox(d,el.bbox); layoutHint.textContent="bbox: ["+el.bbox.join(", ")+"]"; editArea.value=JSON.stringify(currentJson,null,2); renderJsonPreview(); isDirty=true; setBadge("valid","✓ Valid JSON (unsaved) — bbox edited");
+    const bIdx=currentJson.compositional_deconstruction.elements.indexOf(el); if(typeof syncElementListBbox==="function") syncElementListBbox(bIdx, el.bbox);
   });
   const release=()=>{ if(!mode) return; mode=null; d.classList.remove("active"); layoutHint.textContent=HINT_DEFAULT; };
   d.addEventListener("pointerup",release); d.addEventListener("pointercancel",release);
