@@ -19,6 +19,8 @@
   *::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; border: 1px solid var(--bg); }
   *::-webkit-scrollbar-thumb:hover { background: var(--muted); }
   *::-webkit-scrollbar-corner { background: var(--bg); }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: 0.85; }
+  .collapsible-body input, .collapsible-body textarea { color: var(--fg); background: var(--card); }
   html, body { height: 100%; margin: 0; }
   body { background: var(--bg); color: var(--fg); font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; display: flex; flex-direction: column; overflow: hidden; }
   header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--card); flex-shrink: 0; flex-wrap: wrap; }
@@ -244,17 +246,19 @@
       </div>
       <div class="collapsible-section collapsed" data-section="style">
         <div class="collapsible-header" data-toggle="style"><span>◉ Style</span><span class="collapsible-arrow">▸</span></div>
-        <div class="collapsible-body" id="sectionStyle" style="display:none">
-          <input id="fieldAesthetics" placeholder="aesthetics (comma-separated)" style="width:100%; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:var(--code-bg); margin-bottom:6px">
-          <input id="fieldLighting" placeholder="lighting" style="width:100%; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:var(--code-bg); margin-bottom:6px">
-          <input id="fieldMedium" placeholder="medium (photograph, illustration, 3d_render, etc)" style="width:100%; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:var(--code-bg); margin-bottom:6px">
-          <input id="fieldPhoto" placeholder="photo (camera/lens) — for photograph medium" style="width:100%; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:var(--code-bg); margin-bottom:6px">
-          <input id="fieldArtStyle" placeholder="art_style — for non-photograph medium" style="width:100%; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:var(--code-bg); margin-bottom:6px">
+        <div class="collapsible-body" id="sectionStyle" style="gap:10px">
+          <div style="display:flex;flex-direction:column;gap:2px"><label style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:0.05em">AESTHETICS</label><input id="fieldAesthetics" placeholder="soft natural lighting, intimate, tender, documentary realism" style="width:100%; font-size:12px; padding:7px 8px; border:1px solid var(--border); border-radius:6px; background:var(--card); color:var(--fg)"></div>
+          <div style="display:flex;flex-direction:column;gap:2px"><label style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:0.05em">LIGHTING</label><input id="fieldLighting" placeholder="diffused indoor light, soft shadows" style="width:100%; font-size:12px; padding:7px 8px; border:1px solid var(--border); border-radius:6px; background:var(--card); color:var(--fg)"></div>
+          <div style="display:flex;flex-direction:column;gap:2px"><label style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:0.05em">MEDIUM</label><input id="fieldMedium" placeholder="photograph" style="width:100%; font-size:12px; padding:7px 8px; border:1px solid var(--border); border-radius:6px; background:var(--card); color:var(--fg)"></div>
+          <div style="display:flex;flex-direction:column;gap:2px"><label style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:0.05em">PHOTO <span style="font-weight:400;text-transform:none">(camera/lens — for photograph)</span></label><input id="fieldPhoto" placeholder="no specific style — naturalistic portrait photography" style="width:100%; font-size:12px; padding:7px 8px; border:1px solid var(--border); border-radius:6px; background:var(--card); color:var(--fg)"></div>
+          <div style="display:flex;flex-direction:column;gap:2px"><label style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:0.05em">ART_STYLE <span style="font-weight:400;text-transform:none">(for non-photograph)</span></label><input id="fieldArtStyle" placeholder="e.g. watercolor, pixel art" style="width:100%; font-size:12px; padding:7px 8px; border:1px solid var(--border); border-radius:6px; background:var(--card); color:var(--fg)"></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center; margin-top:4px">
-            <span style="font-size:11px;color:var(--muted)">color_palette:</span>
+            <span style="font-size:11px;color:var(--muted);font-weight:600">COLOR_PALETTE:</span>
             <span id="fieldStylePalette" style="display:flex;gap:4px;flex-wrap:wrap"></span>
-            <button id="addStyleColor" style="font-size:11px;padding:2px 6px;border:1px dashed var(--border);border-radius:999px;background:transparent;cursor:pointer">+ color</button>
+            <button id="addStyleColor" style="font-size:11px;padding:2px 6px;border:1px dashed var(--border);border-radius:999px;background:transparent;cursor:pointer;color:var(--fg)">+ color</button>
           </div>
+        </div>
+      </div>
         </div>
       </div>
       <div class="collapsible-section" data-section="composition">
@@ -273,6 +277,10 @@
       <div class="collapsible-section" data-section="raw">
         <div class="collapsible-header" data-toggle="raw"><span>{} Raw JSON</span><span class="collapsible-arrow" style="margin-left:auto">▸</span></div>
         <div class="collapsible-body" id="sectionRaw" style="display:none; flex-direction:column; gap:6px">
+          <div style="display:flex; gap:6px; justify-content:flex-end; align-items:center">
+            <button id="copyRawBtn" class="btn btn-ghost btn-sm" style="padding:4px 10px; font-size:11px">Copy</button>
+            <span id="copyRawMsg" style="font-size:11px;color:var(--muted)"></span>
+          </div>
           <textarea id="editArea" class="edit-area" placeholder="Select an image on the left. If a caption exists it will load here; otherwise click Generate to create one, then edit and Save." spellcheck="false" style="min-height:200px; width:100%; font-size:12px; padding:10px; border:1px solid var(--border); border-radius:8px; background:var(--code-bg);"></textarea>
           <div class="plain-hint" id="plainHint" style="display:none">Plain text mode — saved as <code>.txt</code> next to the image. JSON mode — validated against Ideogram 4 schema, saved as <code>.json</code>.</div>
           <pre id="jsonPreview" style="max-height:180px; margin:0"></pre>
@@ -820,6 +828,12 @@ copyBtn.addEventListener("click", async () => {
   await navigator.clipboard.writeText(editArea.value);
   copyBtn.textContent="Copied"; setTimeout(()=>copyBtn.textContent="Copy",1200);
 });
+const copyRawBtn = $("copyRawBtn"), copyRawMsg = $("copyRawMsg");
+if (copyRawBtn) copyRawBtn.addEventListener("click", async () => {
+  await navigator.clipboard.writeText(editArea.value);
+  copyRawBtn.textContent="Copied"; if(copyRawMsg) copyRawMsg.textContent="✓";
+  setTimeout(()=>{ copyRawBtn.textContent="Copy"; if(copyRawMsg) copyRawMsg.textContent=""; },1200);
+});
 deleteBtn.addEventListener("click", async () => {
   if (!selected || !selected.absPath) return;
   if (!confirm("Delete caption for "+selected.file+"?")) return;
@@ -880,17 +894,21 @@ function blobToDataURL(blob){ return new Promise((res,rej)=>{ const r=new FileRe
 
 // ── batch generate missing ─────────────────────────────────────────────────
 async function generateMissing(){
-  if(!currentFolder) return;
+  if(!currentFolder) {
+    if (images.length && images[0]?.absPath===null) alert("Local preview mode — please Load a folder via full Windows path (e.g. D:\\images) to enable batch generate. Use Browse to preview, but Load needs a real path to save sidecars.");
+    else alert("No folder loaded — please enter a folder path like D:\\images and click Load first.");
+    return;
+  }
   const missing = images.filter(i=>!i.captionFile);
   if(!missing.length){ alert("All images already have captions."); return; }
   if(!confirm(`Generate captions for ${missing.length} images missing a caption? Mode: ${mode}`)) return;
   const btn=$("generateAllBtn"); btn.disabled=true; btn.textContent="Running…";
   try{
     const res=await fetch("/api/generate-folder",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath: currentFolder, mode, aspectRatio: currentAR, steering: steeringInput.value.trim()})});
-    if(!res.ok){const j=await res.json(); throw new Error(j.error);}
+    if(!res.ok){ let j={}; try{ j=await res.json(); }catch{} throw new Error(j.error || `Batch failed ${res.status} ${res.statusText}`); }
     const reader=res.body.getReader(); const decoder=new TextDecoder(); let buf="";
-    while(true){const {done,value}=await reader.read(); if(done) break; buf+=decoder.decode(value,{stream:true}); const lines=buf.split("\n"); buf=lines.pop(); for(const line of lines){if(!line.trim()) continue; const ev=JSON.parse(line); if(ev.type==="file-done"){ const idx=images.findIndex(i=>i.file===ev.file); if(idx!==-1){ images[idx].captionFile=ev.outFile; renderGrid(); } } if(ev.type==="batch-done"){ alert(`Done: ${ev.succeeded}/${ev.total} captioned`+(ev.failed?`, ${ev.failed} failed`:"")); loadFolder(); } if(ev.type==="error"){ alert(ev.message); } } }
-  } catch(e){ alert("Batch failed: "+e.message); }
+    while(true){const {done,value}=await reader.read(); if(done) break; buf+=decoder.decode(value,{stream:true}); const lines=buf.split("\n"); buf=lines.pop(); for(const line of lines){if(!line.trim()) continue; let ev; try{ ev=JSON.parse(line); }catch{ continue; } if(ev.type==="file-done"){ const idx=images.findIndex(i=>i.file===ev.file); if(idx!==-1){ images[idx].captionFile=ev.outFile; renderGrid(); } } else if(ev.type==="file-error"){ console.warn(ev.file, ev.message); } else if(ev.type==="batch-done"){ alert(`Done: ${ev.succeeded}/${ev.total} captioned`+(ev.failed?`, ${ev.failed} failed`:"")); loadFolder(); } else if(ev.type==="error"){ alert(ev.message); console.error(ev); } } }
+  } catch(e){ alert("Batch failed: "+e.message); console.error(e); }
   finally{ btn.disabled=false; btn.textContent="Generate missing"; }
 }
 
