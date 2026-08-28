@@ -26,11 +26,12 @@
   .status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
   .status .dot { width: 7px; height: 7px; border-radius: 50%; background: #d4d4d4; }
   .status.ready .dot { background: var(--green); }
-  /* layout */
+  /* layout — left fits exactly 3x200px (648px) */
   .app-body { flex: 1; display: flex; min-height: 0; overflow: hidden; }
-  .left-pane { flex: 1.35; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--bg); overflow: hidden; }
-  .right-pane { flex: 1; min-width: 320px; max-width: 640px; display: flex; flex-direction: column; background: var(--card); overflow: hidden; }
-  @media (max-width: 900px) { .app-body { flex-direction: column; } .right-pane { max-width: none; border-top: 1px solid var(--border); } .left-pane { flex: none; height: 50%; } }
+  .left-pane { flex: 0 0 648px; width: 648px; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--bg); overflow: hidden; }
+  .right-pane { flex: 1; min-width: 360px; display: flex; flex-direction: column; background: var(--card); overflow: hidden; }
+  @media (max-width: 1100px) { .left-pane { flex: 0 0 648px; width: 648px; } }
+  @media (max-width: 900px) { .app-body { flex-direction: column; } .right-pane { min-width: 0; } .left-pane { flex: none; width: 100%; height: 50%; } }
   /* folder bar */
   .folder-bar { display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--card); flex-shrink: 0; align-items: center; }
   .folder-input { flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--code-bg); color: var(--fg); outline: 0; }
@@ -66,9 +67,19 @@
   .editor-head { padding: 12px; border-bottom: 1px solid var(--border); background: var(--card); flex-shrink: 0; }
   .editor-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .editor-file { font-size: 13px; font-weight: 500; color: var(--fg); text-transform: none; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .preview-wrap { padding: 12px; border-bottom: 1px solid var(--border); background: var(--code-bg); display: none; flex-shrink: 0; }
+  .preview-wrap { display: none; flex-shrink: 0; border-bottom: 1px solid var(--border); background: var(--code-bg); padding: 12px; }
   .preview-wrap.has { display: block; }
-  .preview-wrap img { width: 100%; max-height: 260px; object-fit: contain; border-radius: 8px; border: 1px solid var(--border); background: #0a0a0a; display: block; margin: 0 auto; }
+  .preview-bbox-container { position: relative; width: 100%; max-width: 560px; margin: 0 auto; aspect-ratio: 4 / 3; background: #0a0a0a; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .preview-wrap img { width: 100%; height: 100%; object-fit: contain; display: block; background: #0a0a0a; }
+  .canvas { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; margin: 0; border: none; border-radius: 8px; background-image: linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px); background-size: 25% 25%; pointer-events: none; }
+  .canvas .box { pointer-events: auto; }
+  .canvas-wrap { display: none; }
+  .element-list { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; max-height: 280px; overflow-y: auto; border-top: 1px solid var(--border); background: var(--card); }
+  .element-row { display: grid; grid-template-columns: 36px 1fr auto; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--code-bg); align-items: start; }
+  .element-row .el-idx { font-size: 11px; font-weight: 700; color: var(--muted); padding-top: 6px; }
+  .element-row input, .element-row textarea { font: inherit; font-size: 12px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--fg); }
+  .element-row .bbox-inputs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .element-row .el-actions { display: flex; flex-direction: column; gap: 4px; }
   .meta-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
   .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 3px 8px; }
   .badge.valid { color: var(--green); background: var(--green-bg); }
@@ -82,10 +93,8 @@
   .spinner { width: 13px; height: 13px; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; animation: spin 0.7s linear infinite; display: none; }
   .busy .spinner { display: inline-block; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  /* bbox canvas */
-  .canvas-wrap { border-top: 1px solid var(--border); padding: 12px; background: var(--card); flex-shrink: 0; display: none; }
+  /* bbox canvas legacy */
   .canvas-wrap.show { display: block; }
-  .canvas { position: relative; width: 100%; max-width: 360px; aspect-ratio: 1 / 1; margin: 0 auto; background: #1a1a2e; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background-image: linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px); background-size: 25% 25%; }
   .box { position: absolute; border: 2.5px solid; border-radius: 4px; display: flex; align-items: flex-start; justify-content: flex-start; cursor: grab; user-select: none; touch-action: none; box-shadow: 0 0 0 1px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(0,0,0,0.25); }
   .box.active { cursor: grabbing; }
   .box .tag { margin: 4px; padding: 1px 5px; pointer-events: none; font-size: 10.5px; font-weight: 600; color: #fff; background: rgba(0,0,0,0.65); border-radius: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: calc(100% - 8px); }
@@ -155,17 +164,7 @@
       <button id="loadBtn" class="btn btn-primary btn-sm"><span class="spinner"></span><span id="loadText">Load</span></button>
       <input type="file" id="folderPicker" webkitdirectory directory multiple style="display:none">
     </div>
-    <div class="ar-row" id="arRow">
-      <span class="ar-label">Ratio</span>
-      <button class="ar-btn active" data-ar="1:1" data-w="1000" data-h="1000">1:1</button>
-      <button class="ar-btn" data-ar="4:3" data-w="1000" data-h="750">4:3</button>
-      <button class="ar-btn" data-ar="3:2" data-w="1000" data-h="667">3:2</button>
-      <button class="ar-btn" data-ar="16:9" data-w="1000" data-h="563">16:9</button>
-      <button class="ar-btn" data-ar="21:9" data-w="1000" data-h="429">21:9</button>
-      <button class="ar-btn" data-ar="2:3" data-w="667" data-h="1000">2:3</button>
-      <button class="ar-btn" data-ar="3:4" data-w="750" data-h="1000">3:4</button>
-      <button class="ar-btn" data-ar="9:16" data-w="563" data-h="1000">9:16</button>
-    </div>
+
     <div class="folder-meta" id="folderMeta" style="display:none">
       <span id="folderCount">—</span>
       <span style="display:flex;gap:6px">
@@ -203,18 +202,20 @@
       </div>
     </div>
     <div class="preview-wrap" id="previewWrap">
-      <img id="previewImg" src="" alt="">
+      <div class="preview-bbox-container" id="previewBboxContainer">
+        <img id="previewImg" src="" alt="">
+        <div id="canvas" class="canvas"></div>
+      </div>
+      <div class="layout-controls" id="layoutControls"><button id="addBoxBtn">+ Add Element</button></div>
+      <div class="layout-hint" id="layoutHint">drag to move · pull corner to resize · click × to delete — bbox overlaid on preview (bigger)</div>
     </div>
+    <div id="elementList" class="element-list" style="display:none"></div>
     <div class="editor-body">
       <textarea id="editArea" class="edit-area" placeholder="Select an image on the left. If a caption exists it will load here; otherwise click Generate to create one, then edit and Save." spellcheck="false"></textarea>
       <div class="plain-hint" id="plainHint" style="display:none">Plain text mode — saved as <code>.txt</code> next to the image. JSON mode — validated against Ideogram 4 schema, saved as <code>.json</code>.</div>
       <pre id="jsonPreview"></pre>
     </div>
-    <div class="canvas-wrap" id="canvasWrap">
-      <div class="canvas" id="canvas"></div>
-      <div class="layout-controls"><button id="addBoxBtn">+ Add Element</button></div>
-      <div class="layout-hint" id="layoutHint">drag to move · pull corner to resize · click × to delete</div>
-    </div>
+    <div class="canvas-wrap" id="canvasWrap" style="display:none"></div>
   </section>
 </div>
 
@@ -307,6 +308,16 @@ const HINT_DEFAULT = layoutHint.textContent;
 
 let mode = "ideogram";
 let currentAR = "1:1";
+// aspect ratio now auto-set from source image dimensions — no chooser
+function setAspectFromImage(img) {
+  const w = img.naturalWidth || 1, h = img.naturalHeight || 1;
+  function gcd(a,b){ return b ? gcd(b, a % b) : a; }
+  const g = gcd(w,h);
+  currentAR = `${Math.round(w/g)}:${Math.round(h/g)}`;
+  const cont = document.getElementById("previewBboxContainer");
+  if (cont) cont.style.aspectRatio = w+" / "+h;
+  if (canvas) canvas.style.aspectRatio = w+" / "+h;
+}
 let currentFolder = null;
 let images = []; // {file, size, captionFile, captionMode, absPath}
 let selected = null; // {file, absPath, ext}
@@ -324,6 +335,7 @@ async function pollHealth() {
   setTimeout(pollHealth, 5000);
 }
 pollHealth();
+previewImg.addEventListener("load", ()=> setAspectFromImage(previewImg));
 
 modeSelect.addEventListener("change", () => {
   mode = modeSelect.value;
@@ -331,14 +343,6 @@ modeSelect.addEventListener("change", () => {
   // re-validate or reload caption for selected
   if (selected) loadCaptionForSelected();
   updateCanvasVisibility();
-});
-document.querySelectorAll(".ar-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".ar-btn").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    currentAR = btn.dataset.ar;
-    canvas.style.aspectRatio = btn.dataset.w + " / " + btn.dataset.h;
-  });
 });
 
 // ── folder loading ────────────────────────────────────────────────────────
@@ -520,9 +524,80 @@ function renderJsonPreview() {
 function setBadge(cls,text){ badge.className="badge "+cls; badge.textContent=text; }
 function updateCanvasVisibility(){
   const isIdeogram = mode==="ideogram" && currentJson && currentJson.compositional_deconstruction && Array.isArray(currentJson.compositional_deconstruction.elements);
-  canvasWrap.classList.toggle("show", !!isIdeogram);
-  if (isIdeogram) renderLayout();
-  else canvas.innerHTML="";
+  const elList = document.getElementById("elementList");
+  // canvas is now overlay inside previewWrap — toggle visibility
+  if (canvas) canvas.style.display = isIdeogram ? "block" : "none";
+  const lc = document.getElementById("layoutControls");
+  if (lc) lc.style.display = isIdeogram ? "flex" : "none";
+  const lh = document.getElementById("layoutHint");
+  if (lh) lh.style.display = isIdeogram ? "block" : "none";
+  if (elList) elList.style.display = isIdeogram ? "flex" : "none";
+  if (isIdeogram) { renderLayout(); renderElementList(); }
+  else { canvas.innerHTML=""; if(elList) elList.innerHTML=""; }
+}
+function renderElementList(){
+  const elList = document.getElementById("elementList");
+  if (!elList || !currentJson || !currentJson.compositional_deconstruction) return;
+  const els = currentJson.compositional_deconstruction.elements || [];
+  elList.innerHTML="";
+  els.forEach((el, idx)=>{
+    const row = document.createElement("div");
+    row.className="element-row";
+    row.innerHTML=`
+      <div class="el-idx">#${idx+1}<br><small style="color:var(--muted)">${el.type}</small></div>
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+        ${el.type==="text" ? `<input data-idx="${idx}" data-field="text" value="${(el.text||"").replace(/"/g,"&quot;")}" placeholder="text to render">` : ""}
+        <textarea data-idx="${idx}" data-field="desc" placeholder="desc (appearance, pose, relation)" rows="2">${(el.desc||"").replace(/</g,"&lt;")}</textarea>
+        <div class="bbox-inputs">
+          <input data-idx="${idx}" data-bbox="0" type="number" min="0" max="1000" value="${el.bbox?el.bbox[0]:""}" placeholder="y_min">
+          <input data-idx="${idx}" data-bbox="1" type="number" min="0" max="1000" value="${el.bbox?el.bbox[1]:""}" placeholder="x_min">
+          <input data-idx="${idx}" data-bbox="2" type="number" min="0" max="1000" value="${el.bbox?el.bbox[2]:""}" placeholder="y_max">
+          <input data-idx="${idx}" data-bbox="3" type="number" min="0" max="1000" value="${el.bbox?el.bbox[3]:""}" placeholder="x_max">
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+          <small style="color:var(--muted)">palette:</small>
+          <span class="el-palette" data-idx="${idx}" style="display:flex;gap:4px;flex-wrap:wrap"></span>
+          <button data-add-color="${idx}" style="font-size:11px;padding:2px 6px;border:1px dashed var(--border);border-radius:999px;background:transparent;cursor:pointer">+ color</button>
+        </div>
+      </div>
+      <div class="el-actions">
+        <button data-del="${idx}" title="Delete element" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:rgba(0,0,0,0.05);cursor:pointer">×</button>
+      </div>
+    `;
+    elList.appendChild(row);
+    // palette swatches
+    const palWrap = row.querySelector(".el-palette");
+    (el.color_palette||[]).forEach((hex, pi)=>{
+      const sw = document.createElement("span");
+      sw.style.cssText="width:18px;height:18px;border-radius:50%;border:1px solid var(--border);background:"+hex+";position:relative;overflow:hidden;cursor:pointer;display:inline-block";
+      sw.title=hex+" (click to edit, right-click to remove)";
+      const inp=document.createElement("input"); inp.type="color"; inp.value=hex; inp.style.cssText="position:absolute;top:-4px;left:-4px;width:26px;height:26px;border:none;padding:0;opacity:0.01;cursor:pointer";
+      inp.addEventListener("input", e=>{ el.color_palette[pi]=e.target.value.toUpperCase(); sw.style.background=e.target.value; editArea.value=JSON.stringify(currentJson,null,2); renderJsonPreview(); renderLayout(); isDirty=true; });
+      sw.appendChild(inp);
+      sw.addEventListener("contextmenu", e=>{ e.preventDefault(); el.color_palette.splice(pi,1); renderElementList(); renderLayout(); editArea.value=JSON.stringify(currentJson,null,2); renderJsonPreview(); isDirty=true; });
+      palWrap.appendChild(sw);
+    });
+  });
+  // bind inputs
+  elList.querySelectorAll("[data-field='desc']").forEach(inp=> inp.addEventListener("input", e=>{
+    const idx=Number(e.target.dataset.idx); currentJson.compositional_deconstruction.elements[idx].desc=e.target.value; editArea.value=JSON.stringify(currentJson,null,2); renderJsonPreview(); renderLayout();
+    const tag = document.querySelectorAll(".box .tag")[idx]; if(tag) tag.textContent = currentJson.compositional_deconstruction.elements[idx].type==="text" && currentJson.compositional_deconstruction.elements[idx].text ? "“"+currentJson.compositional_deconstruction.elements[idx].text+"”" : String(e.target.value||currentJson.compositional_deconstruction.elements[idx].type).split(/[,.]/)[0].split(/\s+/).slice(0,3).join(" ");
+    isDirty=true;
+  }));
+  elList.querySelectorAll("[data-field='text']").forEach(inp=> inp.addEventListener("input", e=>{
+    const idx=Number(e.target.dataset.idx); currentJson.compositional_deconstruction.elements[idx].text=e.target.value; editArea.value=JSON.stringify(currentJson,null,2); renderJsonPreview(); renderLayout(); isDirty=true;
+  }));
+  elList.querySelectorAll("[data-bbox]").forEach(inp=> inp.addEventListener("input", e=>{
+    const idx=Number(e.target.dataset.idx), p=Number(e.target.dataset.bbox); const v=Number(e.target.value); if(!Number.isFinite(v)) return;
+    currentJson.compositional_deconstruction.elements[idx].bbox[p]=Math.max(0,Math.min(1000,Math.round(v)));
+    editArea.value=JSON.stringify(currentJson,null,2); renderJsonPreview(); renderLayout(); isDirty=true;
+  }));
+  elList.querySelectorAll("[data-del]").forEach(btn=> btn.addEventListener("click", e=>{
+    const idx=Number(e.target.dataset.del); currentJson.compositional_deconstruction.elements.splice(idx,1); activeBbox=null; editArea.value=JSON.stringify(currentJson,null,2); renderJsonPreview(); renderLayout(); renderElementList(); isDirty=true;
+  }));
+  elList.querySelectorAll("[data-add-color]").forEach(btn=> btn.addEventListener("click", e=>{
+    const idx=Number(e.target.dataset.addColor); const el=currentJson.compositional_deconstruction.elements[idx]; if(!el.color_palette) el.color_palette=[]; if(el.color_palette.length>=5) return; el.color_palette.push("#FFFFFF"); renderElementList(); renderLayout(); editArea.value=JSON.stringify(currentJson,null,2); renderJsonPreview(); isDirty=true;
+  }));
 }
 
 // ── save / copy / delete ───────────────────────────────────────────────────

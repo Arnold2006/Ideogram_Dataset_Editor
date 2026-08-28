@@ -98,8 +98,16 @@ if not exist "%APP%\node_modules" (
   exit /b 1
 )
 if not exist "%APP%\bin\llama-server.exe" (
-  echo [Ideogram4 Dataset Editor] llama-server not found - editor still works, generation needs it.
-  echo [Ideogram4 Dataset Editor] Run: node app/scripts/download-llama.mjs and add models to app\models\
+  echo [Ideogram4 Dataset Editor] llama-server not found — downloading on first run...
+  "%NODE_EXE%" "%APP%\scripts\download-llama.mjs"
+  if errorlevel 1 (
+    echo Download failed - check internet. Editor still works without generation.
+  ) else (
+    echo llama-server installed.
+  )
+)
+if not exist "%APP%\bin\llama-server.exe" (
+  echo [Ideogram4 Dataset Editor] llama-server still missing — generation disabled, editor still works.
 )
 set "PORT=8123"
 echo [Ideogram4 Dataset Editor] Starting on http://127.0.0.1:%PORT% ...
