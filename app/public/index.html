@@ -277,9 +277,7 @@ if(browseBtn) browseBtn.addEventListener("click", async e=>{
 if(folderPicker) folderPicker.addEventListener("change", ()=>{
   const files=Array.from(folderPicker.files||[]);
   if(!files.length) return;
-  const rel=files[0].webkitRelativePath||"";
-  const folderName=rel.split("/")[0]||"selected folder";
-  folderInput.value=folderName+"  (local preview — use full path for Save)";
+  // keep folderInput for server path — show local preview note in counter, not in input
   renderLocalGrid(files);
 });
 function renderLocalGrid(fileList){
@@ -311,9 +309,15 @@ function selectLocal(idx){
 }
 
 async function loadFolder(){
-  const p=(folderInput.value||"").trim();
-  if(!p){ alert("Please enter a folder path or use Browse"); return; }
-  if(p.includes("(local preview")){ alert("Local preview mode — to Save sidecars to disk, please type the full Windows path (e.g. D:\\images) and click Load again"); return; }
+  let p=(folderInput.value||"").trim();
+  // strip local preview suffix if user left it (Browse sets it, but we now don't)
+  if(p.includes("(local preview")) p=p.split("  (local")[0].trim();
+  if(!p){ alert("Please enter a folder path like D:\\images and click Load, or use Browse for quick local preview"); return; }
+  // if still looks like a bare folder name from local preview, warn
+  if(!p.includes("\\") && !p.includes("/") && !p.includes(":")){
+    alert("Please enter a full Windows path like D:\\images and click Load. Browse gives local preview only (Save downloads).");
+    return;
+  }
   loadBtn.disabled=true; loadBtn.style.opacity="0.6";
   try{
     const res=await fetch("/api/list",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({folderPath:p})});
@@ -356,14 +360,16 @@ if(folderInput) folderInput.addEventListener("keydown", e=>{ if(e.key==="Enter")
 if(refreshBtn) refreshBtn.addEventListener("click", loadFolder);
 if(generateAllBtn) generateAllBtn.addEventListener("click", generateMissing);
 
-function handleThumbClick(idx){
+async function handleThumbClick(idx){
   console.log("thumb click", idx, serverImages[idx]?.file, "current before", current, "mode", serverImages[idx]?.absPath===null?"local":"server", "dataset.len", dataset.length);
+  if(idx===current) return;
   // LOCAL PREVIEW MODE: Browse without Load — serverImages has fileObj, dataset is dummy
   if(serverImages[idx] && serverImages[idx].absPath===null){
-    // local: directly use selectLocal logic
+    if(modified.has(current)){
+      try{ await saveCurrentJson(); }catch{}
+    }
     document.querySelectorAll(".thumb").forEach((el,i)=>el.classList.toggle("selected", i===idx));
     const entry=serverImages[idx];
-    // update center preview directly
     const wrap=document.getElementById("img-wrap");
     let img=wrap.querySelector("img");
     if(!img){ img=document.createElement("img"); wrap.insertBefore(img, wrap.firstChild); }
@@ -373,7 +379,6 @@ function handleThumbClick(idx){
     document.getElementById("img-name").style.display="block";
     const dz=document.getElementById("drop-zone"); if(dz) dz.style.display="none";
     const rc=document.getElementById("right-col"); if(rc) rc.style.display="block";
-    // update simple dataset for right col
     dataset=[{base:entry.file.replace(/\.[^.]+$/,""), imgName:entry.file, jsonName:entry.file.replace(/\.[^.]+$/,"")+".json", jsonHandle:null, imgUrl:img.src, data:{high_level_description:"",style_description:{aesthetics:"",lighting:"",medium:"photograph",color_palette:[]},compositional_deconstruction:{background:"",elements:[]}}, absPath:null}];
     current=0;
     fillForm(dataset[0].data);
@@ -388,11 +393,10 @@ function handleThumbClick(idx){
   }
   if(idx >=0 && idx < dataset.length){
     if(modified.has(current)){
-      saveCurrentJson().catch(()=>{});
-      modified.delete(current);
+      try{ await saveCurrentJson(); }catch(e){ console.warn("auto-save failed", e); }
     }
     current=idx;
-    renderEntry();
+    await renderEntry();
     document.querySelectorAll(".thumb").forEach((el,i)=>{
       const it2=serverImages[i];
       el.classList.toggle("selected", dataset[current] && dataset[current].imgName===it2.file);
@@ -489,19 +493,29 @@ async function goTo(i){
   if(modified.has(current)) await saveCurrentJson();
   current=i; renderEntry();
 }
-function renderEntry(){
+async function renderEntry(){
   if(!dataset.length) return;
   const d=dataset[current];
+  // if data empty but JSON exists on disk, reload it (fixes revisit not loading elements)
+  if(d.absPath && (!d.data || !d.data.compositional_deconstruction || !d.data.compositional_deconstruction.elements || d.data.compositional_deconstruction.elements.length===0)){
+    if(d.captionFile){
+      try{
+        const capRes=await fetch("/api/caption?path="+encodeURIComponent(d.absPath));
+        const capJ=await capRes.json();
+        if(capJ.exists && capJ.mode==="ideogram"){
+          try{ d.data=JSON.parse(capJ.content); }catch{}
+        }
+      }catch{}
+    }
+  }
   const wrap=document.getElementById("img-wrap");
   let img=wrap.querySelector("img");
   if(!img){ img=document.createElement("img"); wrap.insertBefore(img, wrap.firstChild); }
-  // handle both server absPath and blob url
   if(d.absPath) img.src="/api/image?path="+encodeURIComponent(d.absPath)+"&t="+Date.now();
   else img.src=d.imgUrl;
   img.alt=d.imgName;
   img.onload=()=>drawBboxes();
   document.getElementById("img-name").textContent=d.imgName;
-  // also sync folderInput preview
   updateSidebar();
   fillForm(d.data);
   // sync grid selection
@@ -1021,22 +1035,21 @@ async function generateForSelected(){
   finally{ busyGen=false; if(saveInd){ saveInd.classList.remove("show"); saveInd.textContent="Saved"; } }
 }
 async function generateMissing(){
-  // infer folder if currentFolder not set but server images have absPath
+  // prefer currentFolder, else derive from serverImages/dataset
   let folder = currentFolder;
-  if(!folder && serverImages.length && serverImages[0]?.absPath){
-    const p=serverImages[0].absPath;
-    folder=p.substring(0, p.lastIndexOf("/")) || p.substring(0, p.lastIndexOf("\\")) || p;
-    // normalize: strip filename
-    try{ folder = folder.replace(/\/[^\/]+$/, "").replace(/\\[^\\]+$/, ""); if(!folder) folder=p.substring(0, Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"))); }catch{}
-    // fallback: use dataset absPath
-    if(!folder || folder===p) folder = dataset[0]?.absPath ? dataset[0].absPath.substring(0, dataset[0].absPath.lastIndexOf("/")) : null;
+  if(!folder){
+    const probe = serverImages.find(s=>s.absPath) || dataset.find(d=>d.absPath);
+    if(probe && probe.absPath){
+      const p=probe.absPath;
+      const slash=Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+      folder = slash>0 ? p.substring(0, slash) : p;
+    }
   }
   if(!folder){
-    if(serverImages.length && serverImages[0]?.absPath===null) alert("Local preview mode — please Load a folder via full Windows path (e.g. D:\\images) to enable batch generate. Use Browse to preview, but Load needs a real path to save sidecars.");
-    else alert("No folder loaded — please enter a folder path like D:\\images and click Load first. (If you just Loaded, wait for grid to finish.)");
+    if(serverImages.length && serverImages[0]?.absPath===null) alert("Local preview mode — please Load a folder via full Windows path (e.g. D:\\images) to enable batch generate. Use Browse for preview, but Load needs a real path. Type D:\\images and click Load.");
+    else alert("No folder loaded — please enter a folder path like D:\\images and click Load first.");
     return;
   }
-  // ensure currentFolder is set for next time
   currentFolder = folder;
   // check if any missing via dataset
   const missing=dataset.filter(d=>!d.captionFile && !modified.has(dataset.indexOf(d)));
