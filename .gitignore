@@ -2,6 +2,7 @@ node_modules/
 app/node_modules/
 app/bin/
 app/models/
+app/config/settings.json
 dist/
 out/
 logs/

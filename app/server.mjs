@@ -9,35 +9,37 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { normalizeCaption, serializeCaption } from "./src/normalize.mjs";
 import { validateCaption } from "./src/validate.mjs";
-import { SYSTEM_PROMPT, FEW_SHOT, MINIMAX_SYSTEM_PROMPT } from "./src/prompt.mjs";
+import { SYSTEM_PROMPT as FALLBACK_SYSTEM, FEW_SHOT, MINIMAX_SYSTEM_PROMPT as FALLBACK_MINIMAX } from "./src/prompt.mjs";
 import { GENERATION_SCHEMA } from "./src/generation-schema.mjs";
 import { IDEOGRAM_SCHEMA } from "./src/ideogram-schema.mjs";
+import { loadSettings, saveSettings, resetPrompts, listModels, getEffectivePrompt, DEFAULT_PROMPTS } from "./src/settings.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const PLAIN_SYSTEM_PROMPT = `You are an expert prompt engineer for text-to-image AI models.
-When given a description or reference image, write a single rich plain-text prompt optimised for models like Flux, SDXL, or similar diffusion models.
+// PLAIN fallback is stored in settings defaults; keep local copy for import fallback
+const PLAIN_FALLBACK = DEFAULT_PROMPTS.plainSystemPrompt;
 
-Rules:
-- Output ONLY the prompt text itself — no preamble, no explanation, no quotes, no markdown
-- Be highly descriptive: subject, style, lighting, mood, color palette, camera/lens feel, era
-- Use natural flowing prose mixed with comma-separated descriptive phrases
-- Aim for 60-120 words
-- Do not mention Ideogram, JSON, or any schema`;
 const PORT = Number(process.env.PORT) || 8123;
 const HOST = "127.0.0.1";
 const LLAMA_PORT = Number(process.env.LLAMA_PORT) || 8124;
-const CONTEXT_SIZE = Number(process.env.CONTEXT_SIZE) || 32768;
+// CONTEXT_SIZE now comes from settings (env still overrides)
+function getContextSize() {
+  try { return loadSettings().contextSize || 32768; } catch { return 32768; }
+}
+const CONTEXT_SIZE = Number(process.env.CONTEXT_SIZE) || getContextSize();
 const MAX_ATTEMPTS = 2;
 
-// ── model / mmproj discovery ──────────────────────────────────────────────────
+// ── model / mmproj discovery (settings → env → auto) ───────────────────────
 function resolveModels() {
   const modelsDir = path.join(__dirname, "models");
   if (!fs.existsSync(modelsDir)) {
     return { modelFile: null, mmprojFile: null, modelsDir };
   }
   const files = fs.readdirSync(modelsDir);
-  const modelFile = process.env.MODEL_PATH
+  let s = null; try { s = loadSettings(); } catch {}
+  const modelFile = s?.modelPath
+    ? path.resolve(s.modelPath)
+    : process.env.MODEL_PATH
     ? path.resolve(process.env.MODEL_PATH)
     : (() => {
         const f = files
@@ -45,7 +47,9 @@ function resolveModels() {
           .sort()[0];
         return f ? path.join(modelsDir, f) : null;
       })();
-  const mmprojFile = process.env.MMPROJ_PATH
+  const mmprojFile = s?.mmprojPath
+    ? path.resolve(s.mmprojPath)
+    : process.env.MMPROJ_PATH
     ? path.resolve(process.env.MMPROJ_PATH)
     : (() => {
         const f = files
@@ -107,14 +111,16 @@ async function startLlamaServer(serverBin, modelFile, mmprojFile) {
   return proc;
 }
 
-// ── build messages ───────────────────────────────────────────────────────────
+// ── build messages (with fallback prompts) ─────────────────────────────────
 function buildMessages(description, imageBase64, lastErrors, steering = "", aspectRatio = "1:1") {
   const [arW, arH] = aspectRatio.split(":").map(Number);
   const gridW = arW >= arH ? 1000 : Math.round(1000 * arW / arH);
   const gridH = arH >= arW ? 1000 : Math.round(1000 * arH / arW);
   const arNote = `\n\nTarget aspect ratio: ${aspectRatio} (bbox grid is ${gridW}\u00d7${gridH}, x in [0,${gridW}], y in [0,${gridH}]). Place and size all bboxes to suit this canvas shape.`;
   const styleNote = `\n\nYou MUST always include the "style_description" object in your output. It is required, never optional. Choose either the photograph variant (with fields: aesthetics, lighting, photo, medium="photograph", color_palette) or the art variant (with fields: aesthetics, lighting, medium, art_style, color_palette). Always populate all fields with rich, specific values. Never omit style_description.`;
-  const sysPrompt = (steering ? SYSTEM_PROMPT + "\n\nAdditional style guidance:\n" + steering : SYSTEM_PROMPT) + styleNote + arNote;
+  let basePrompt = FALLBACK_SYSTEM;
+  try { const s = loadSettings(); basePrompt = getEffectivePrompt(s, "systemPrompt"); } catch {}
+  const sysPrompt = (steering ? basePrompt + "\n\nAdditional style guidance:\n" + steering : basePrompt) + styleNote + arNote;
   const messages = [{ role: "system", content: sysPrompt }];
   for (const [user, response] of FEW_SHOT) {
     messages.push({ role: "user", content: user });
@@ -139,7 +145,9 @@ function buildMessages(description, imageBase64, lastErrors, steering = "", aspe
 
 function buildPlainMessages(description, imageBase64, aspectRatio = "1:1", steering = "") {
   const arNote = `\n\nTarget image aspect ratio: ${aspectRatio}. Keep composition descriptions appropriate for this shape.`;
-  const sysPrompt = (steering ? PLAIN_SYSTEM_PROMPT + "\n\nAdditional style guidance:\n" + steering : PLAIN_SYSTEM_PROMPT) + arNote;
+  let basePlain = PLAIN_FALLBACK;
+  try { const s = loadSettings(); basePlain = getEffectivePrompt(s, "plainSystemPrompt"); } catch {}
+  const sysPrompt = (steering ? basePlain + "\n\nAdditional style guidance:\n" + steering : basePlain) + arNote;
   const messages = [{ role: "system", content: sysPrompt }];
   let userContent;
   if (imageBase64) {
@@ -156,7 +164,9 @@ function buildPlainMessages(description, imageBase64, aspectRatio = "1:1", steer
 }
 
 function buildMiniMaxMessages(description, imageBase64, steering = "") {
-  const sysPrompt = steering ? MINIMAX_SYSTEM_PROMPT + "\n\nAdditional style guidance:\n" + steering : MINIMAX_SYSTEM_PROMPT;
+  let baseMini = FALLBACK_MINIMAX;
+  try { const s = loadSettings(); baseMini = getEffectivePrompt(s, "minimaxSystemPrompt"); } catch {}
+  const sysPrompt = steering ? baseMini + "\n\nAdditional style guidance:\n" + steering : baseMini;
   const messages = [{ role: "system", content: sysPrompt }];
   let userContent;
   if (imageBase64) {
@@ -433,6 +443,44 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "GET" && url.pathname === "/api/schema") {
     sendJson(res, 200, IDEOGRAM_SCHEMA); return;
+  }
+
+  // ── settings APIs ──────────────────────────────────────────────────────
+  if (req.method === "GET" && url.pathname === "/api/settings") {
+    try {
+      const s = loadSettings();
+      const models = listModels();
+      sendJson(res, 200, { settings: s, models, defaults: DEFAULT_PROMPTS });
+    } catch (err) { sendJson(res, 500, { error: String(err.message) }); }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/settings") {
+    try {
+      const body = JSON.parse(await readBody(req));
+      const saved = saveSettings(body);
+      const models = listModels();
+      sendJson(res, 200, { ok: true, settings: saved, models });
+    } catch (err) { sendJson(res, 400, { error: String(err.message) }); }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/settings/reset") {
+    let key = null;
+    try {
+      const raw = await readBody(req);
+      if (raw.trim()) key = JSON.parse(raw).key || null;
+    } catch {}
+    try {
+      let saved;
+      if (key && DEFAULT_PROMPTS[key] !== undefined) {
+        const cur = loadSettings();
+        cur.prompts[key] = DEFAULT_PROMPTS[key];
+        saved = saveSettings(cur);
+      } else {
+        saved = resetPrompts();
+      }
+      sendJson(res, 200, { ok: true, settings: saved, defaults: DEFAULT_PROMPTS });
+    } catch (err) { sendJson(res, 500, { error: String(err.message) }); }
+    return;
   }
 
   // ── dataset APIs ───────────────────────────────────────────────────────

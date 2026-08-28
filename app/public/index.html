@@ -47,16 +47,16 @@
   .ar-label { font-size: 11px; color: var(--muted); flex-shrink: 0; }
   .ar-btn { font: 12px/1 inherit; color: var(--muted); background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; cursor: pointer; flex-shrink: 0; white-space: nowrap; }
   .ar-btn.active { color: var(--accent-fg); background: var(--accent); border-color: var(--accent); }
-  /* grid */
-  .grid-wrap { flex: 1; overflow-y: auto; padding: 12px; min-height: 0; }
-  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  /* grid — thumbnails halved (prev 1/1 full width → 70px half) */
+  .grid-wrap { flex: 1; overflow-y: auto; padding: 8px; min-height: 0; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   @media (max-width: 1100px) { .grid { grid-template-columns: repeat(3, 1fr); } }
   @media (max-width: 700px) { .grid { grid-template-columns: repeat(2, 1fr); } }
-  .thumb { position: relative; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--card); cursor: pointer; transition: border-color 0.12s, box-shadow 0.12s; display: flex; flex-direction: column; }
+  .thumb { position: relative; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--card); cursor: pointer; transition: border-color 0.12s, box-shadow 0.12s; display: flex; flex-direction: column; }
   .thumb:hover { border-color: var(--muted); }
   .thumb.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
-  .thumb img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; display: block; background: #111827; }
-  .thumb-foot { padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .thumb img { width: 100%; height: 72px; object-fit: cover; display: block; background: #111827; }
+  .thumb-foot { padding: 4px 6px; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
   .thumb-name { font-size: 11px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .thumb-badge { font-size: 10px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); display: inline-flex; align-items: center; gap: 4px; width: fit-content; }
   .thumb-badge.has { color: var(--green); background: var(--green-bg); border-color: transparent; }
@@ -110,6 +110,25 @@
   .steering input { flex: 1; font: inherit; font-size: 12px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--code-bg); color: var(--fg); outline: 0; }
   .drop-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; z-index: 50; color: #fff; font-size: 18px; font-weight: 600; }
   .drop-overlay.show { display: flex; }
+  /* settings */
+  .settings-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; z-index: 60; padding: 16px; }
+  .settings-overlay.show { display: flex; }
+  .settings-panel { width: min(900px, 96vw); max-height: 88vh; background: var(--card); border: 1px solid var(--border); border-radius: 14px; display: flex; flex-direction: column; overflow: hidden; }
+  .settings-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .settings-head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+  .settings-tabs { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--code-bg); }
+  .settings-tab { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--fg); font: inherit; font-size: 13px; cursor: pointer; }
+  .settings-tab.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  .settings-body { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+  .settings-tab-pane { display: none; flex-direction: column; gap: 12px; }
+  .settings-tab-pane.active { display: flex; }
+  .settings-field { display: flex; flex-direction: column; gap: 4px; }
+  .settings-field label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .settings-field input, .settings-field select, .settings-field textarea { font: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--code-bg); color: var(--fg); outline: 0; }
+  .settings-field textarea { min-height: 120px; max-height: 220px; resize: vertical; font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; }
+  .settings-field small { font-size: 11px; color: var(--muted); }
+  .settings-foot { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); background: var(--card); }
+  .models-list { font-size: 12px; color: var(--muted); background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; max-height: 120px; overflow-y: auto; }
 </style>
 </head>
 <body>
@@ -124,6 +143,7 @@
       <option value="plain">Plain text</option>
       <option value="minimax">MiniMax H3</option>
     </select>
+    <button id="settingsBtn" class="btn btn-ghost btn-sm" title="Manage models & system prompts">⚙ Settings</button>
     <div class="status" id="status"><span class="dot"></span><span id="statusText">starting…</span></div>
   </div>
 </header>
@@ -200,6 +220,67 @@
 </div>
 
 <div class="drop-overlay" id="dropOverlay">Drop folder to load</div>
+
+<div class="settings-overlay" id="settingsOverlay">
+  <div class="settings-panel">
+    <div class="settings-head">
+      <h2>Settings</h2>
+      <button id="settingsClose" class="btn btn-ghost btn-sm">✕</button>
+    </div>
+    <div class="settings-tabs">
+      <button class="settings-tab active" data-tab="models">Models</button>
+      <button class="settings-tab" data-tab="prompts">System Prompts</button>
+    </div>
+    <div class="settings-body">
+      <div id="settingsModels" class="settings-tab-pane active">
+        <div class="settings-field">
+          <label>Detected models in app/models</label>
+          <div id="modelsList" class="models-list">loading…</div>
+          <small>Place .gguf files in app/models and click Refresh. Requires restart to reload llama-server.</small>
+        </div>
+        <div class="settings-field">
+          <label for="modelPathInput">Model file (auto = first .gguf)</label>
+          <input id="modelPathInput" placeholder="leave empty for auto-discover e.g. app/models/Huihui-Q4_K_M.gguf">
+          <small>Absolute or app/models/... path. Takes effect after restart.</small>
+        </div>
+        <div class="settings-field">
+          <label for="mmprojPathInput">Mmproj file (vision projector)</label>
+          <input id="mmprojPathInput" placeholder="leave empty for auto-discover e.g. app/models/mmproj-F16.gguf">
+        </div>
+        <div class="settings-field">
+          <label for="contextSizeInput">Context size</label>
+          <input id="contextSizeInput" type="number" min="1024" max="131072" step="1024">
+          <small>Default 32768. Larger needs more VRAM. Requires restart.</small>
+        </div>
+        <button id="modelsRefresh" class="btn btn-ghost btn-sm" style="width:fit-content">↻ Refresh model list</button>
+      </div>
+      <div id="settingsPrompts" class="settings-tab-pane">
+        <div class="settings-field">
+          <label for="promptSystem">Ideogram JSON — SYSTEM_PROMPT</label>
+          <textarea id="promptSystem" spellcheck="false"></textarea>
+          <small>If you mess it up, empty (&lt;10 chars) auto-falls back to default. <button data-reset="systemPrompt" class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:11px">Reset this</button></small>
+        </div>
+        <div class="settings-field">
+          <label for="promptPlain">Plain text — PLAIN_SYSTEM_PROMPT</label>
+          <textarea id="promptPlain" spellcheck="false"></textarea>
+          <small>Plain text for Flux/SDXL. Fallback if empty. <button data-reset="plainSystemPrompt" class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:11px">Reset this</button></small>
+        </div>
+        <div class="settings-field">
+          <label for="promptMinimax">MiniMax H3 — MINIMAX_SYSTEM_PROMPT</label>
+          <textarea id="promptMinimax" spellcheck="false"></textarea>
+          <small>Full H3 spec. Fallback if empty. <button data-reset="minimaxSystemPrompt" class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:11px">Reset this</button></small>
+        </div>
+      </div>
+    </div>
+    <div class="settings-foot">
+      <button id="settingsSave" class="btn btn-primary btn-sm">Save</button>
+      <button id="settingsResetAll" class="btn btn-ghost btn-sm">Reset All Prompts to Default</button>
+      <span id="settingsMsg" style="font-size:12px;color:var(--muted)"></span>
+      <span style="flex:1"></span>
+      <small style="color:var(--muted)">Prompts fallback automatically if &lt;10 chars</small>
+    </div>
+  </div>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -610,6 +691,103 @@ $("addBoxBtn").addEventListener("click", ()=>{
   if(!currentJson||!currentJson.compositional_deconstruction) return;
   const els=currentJson.compositional_deconstruction.elements; const newEl={type:"obj", bbox:[300,300,700,700], desc:"new element"}; els.push(newEl); activeBbox=els.length-1; editArea.value=JSON.stringify(currentJson,null,2); renderLayout(); renderJsonPreview(); isDirty=true; setBadge("valid","✓ Valid JSON (unsaved) — element added");
 });
+
+// ── settings page ────────────────────────────────────────────────────────
+const settingsOverlay = $("settingsOverlay"), settingsBtn = $("settingsBtn"), settingsClose = $("settingsClose");
+const settingsTabs = document.querySelectorAll(".settings-tab"), settingsPanes = { models:$("settingsModels"), prompts:$("settingsPrompts") };
+const modelPathInput = $("modelPathInput"), mmprojPathInput = $("mmprojPathInput"), contextSizeInput = $("contextSizeInput"), modelsList = $("modelsList");
+const promptSystem = $("promptSystem"), promptPlain = $("promptPlain"), promptMinimax = $("promptMinimax");
+const settingsSave = $("settingsSave"), settingsResetAll = $("settingsResetAll"), settingsMsg = $("settingsMsg");
+function openSettings() { settingsOverlay.classList.add("show"); loadSettings(); }
+function closeSettings() { settingsOverlay.classList.remove("show"); }
+settingsBtn.addEventListener("click", openSettings);
+settingsClose.addEventListener("click", closeSettings);
+settingsOverlay.addEventListener("click", e=>{ if(e.target===settingsOverlay) closeSettings(); });
+document.querySelectorAll(".settings-tab").forEach(btn=> btn.addEventListener("click", ()=>{
+  document.querySelectorAll(".settings-tab").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  Object.values(settingsPanes).forEach(p=>p.classList.remove("active"));
+  settingsPanes[btn.dataset.tab].classList.add("active");
+}));
+async function loadSettings() {
+  settingsMsg.textContent="loading…";
+  try {
+    const r = await fetch("/api/settings"); const j = await r.json();
+    if (!r.ok) throw new Error(j.error);
+    const s = j.settings;
+    modelPathInput.value = s.modelPath || "";
+    mmprojPathInput.value = s.mmprojPath || "";
+    contextSizeInput.value = s.contextSize || 32768;
+    promptSystem.value = j.defaults.systemPrompt;
+    // show effective (with fallback already applied in backend, but we display saved or default if fallback triggered)
+    // j.settings.prompts already contains effective with fallback, j.defaults is pure default
+    // to show user what they saved, use s.prompts; if they cleared, s.prompts will be fallback, so textarea shows fallback
+    if (s.prompts) {
+      promptSystem.value = s.prompts.systemPrompt;
+      promptPlain.value = s.prompts.plainSystemPrompt;
+      promptMinimax.value = s.prompts.minimaxSystemPrompt;
+    }
+    // models list
+    if (j.models && j.models.length) {
+      modelsList.innerHTML = j.models.map(m=> `<div style="display:flex;justify-content:space-between;gap:8px"><span>${m.name}</span><small>${m.isMmproj? "mmproj":"model"}</small></div>`).join("");
+    } else {
+      modelsList.textContent = "no .gguf found in app/models — add files and Refresh";
+    }
+    settingsMsg.textContent="loaded (fallback active if you cleared a prompt)";
+    setTimeout(()=> settingsMsg.textContent="", 2000);
+  } catch(e) { settingsMsg.textContent="load failed: "+e.message; }
+}
+$("modelsRefresh").addEventListener("click", loadSettings);
+settingsSave.addEventListener("click", async ()=>{
+  settingsMsg.textContent="saving…";
+  try {
+    const body = {
+      modelPath: modelPathInput.value.trim() || null,
+      mmprojPath: mmprojPathInput.value.trim() || null,
+      contextSize: Number(contextSizeInput.value) || 32768,
+      prompts: {
+        systemPrompt: promptSystem.value,
+        plainSystemPrompt: promptPlain.value,
+        minimaxSystemPrompt: promptMinimax.value,
+      }
+    };
+    const r = await fetch("/api/settings", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error);
+    settingsMsg.textContent="saved ✓ (empty prompts auto-fallback)";
+    setTimeout(()=> settingsMsg.textContent="", 2000);
+    // update textareas to effective values (fallback applied server-side)
+    promptSystem.value = j.settings.prompts.systemPrompt;
+    promptPlain.value = j.settings.prompts.plainSystemPrompt;
+    promptMinimax.value = j.settings.prompts.minimaxSystemPrompt;
+  } catch(e) { settingsMsg.textContent="save failed: "+e.message; }
+});
+settingsResetAll.addEventListener("click", async ()=>{
+  if (!confirm("Reset all 3 system prompts to defaults?")) return;
+  settingsMsg.textContent="resetting…";
+  try {
+    const r = await fetch("/api/settings/reset", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({}) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error);
+    promptSystem.value = j.settings.prompts.systemPrompt;
+    promptPlain.value = j.settings.prompts.plainSystemPrompt;
+    promptMinimax.value = j.settings.prompts.minimaxSystemPrompt;
+    settingsMsg.textContent="reset to defaults ✓";
+  } catch(e) { settingsMsg.textContent="reset failed: "+e.message; }
+});
+document.querySelectorAll("[data-reset]").forEach(btn=> btn.addEventListener("click", async ()=>{
+  const key = btn.dataset.reset;
+  if (!confirm("Reset this prompt to default?")) return;
+  try {
+    const r = await fetch("/api/settings/reset", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({key}) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error);
+    if (key==="systemPrompt") promptSystem.value = j.settings.prompts.systemPrompt;
+    if (key==="plainSystemPrompt") promptPlain.value = j.settings.prompts.plainSystemPrompt;
+    if (key==="minimaxSystemPrompt") promptMinimax.value = j.settings.prompts.minimaxSystemPrompt;
+    settingsMsg.textContent="reset "+key+" ✓";
+  } catch(e) { settingsMsg.textContent="reset failed: "+e.message; }
+}));
 
 // hint
 plainHint.style.display="";
