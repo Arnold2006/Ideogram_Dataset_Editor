@@ -28,4 +28,3 @@ if exist "app\package.json" (
   popd
 )
 echo [Ideogram4 Dataset Editor] Done.
-pause
