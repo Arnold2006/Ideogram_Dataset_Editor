@@ -808,14 +808,17 @@ function getFormData(){
 }
 function v(id){return document.getElementById(id)?.value.trim()||""}
 function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+let autoSaveTimer=null;
 function onFormChange(){
   modified.add(current);
   dataset[current].data=getFormData();
   document.getElementById("unsaved-dot").style.display="inline-block";
-  // sync raw JSON
   const raw=document.getElementById("raw-json");
   if(raw) { raw.value=JSON.stringify(dataset[current].data,null,2); document.getElementById("raw-error").style.display="none"; }
   drawBboxes();
+  // debounce auto-save to disk (and update grid badge) so edits survive tab switch
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer=setTimeout(()=>{ saveCurrentJson().catch(e=>console.warn("auto-save failed",e)); }, 900);
 }
 function onElChange(i){
   onFormChange();
@@ -894,35 +897,48 @@ function removeElColor(elIdx,colorIdx){
   onFormChange();
 }
 async function saveCurrentJson(){
-  dataset[current].data=getFormData();
-  const json=JSON.stringify(dataset[current].data,null,2);
-  // try server save if absPath exists
-  if(dataset[current].absPath){
+  // capture current index's data before any async switch
+  const saveIdx=current;
+  const saveData=getFormData();
+  dataset[saveIdx].data=saveData;
+  const json=JSON.stringify(saveData,null,2);
+  let serverOk=false;
+  if(dataset[saveIdx].absPath){
     try{
       const mode="ideogram";
-      const res=await fetch("/api/save-caption",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({imagePath:dataset[current].absPath,content:json,mode})});
+      const res=await fetch("/api/save-caption",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({imagePath:dataset[saveIdx].absPath,content:json,mode})});
       const j=await res.json();
       if(!res.ok) throw new Error(j.error||res.statusText);
-    }catch(e){ console.warn("server save failed, fallback to download",e); }
+      serverOk=true;
+      dataset[saveIdx].captionFile=dataset[saveIdx].jsonName;
+      const it=serverImages.find(s=>s.file===dataset[saveIdx].imgName);
+      if(it) it.captionFile=dataset[saveIdx].jsonName;
+    }catch(e){ console.warn("server save failed",e); }
   }
   // also try FileSystem Access handle if exists
-  if(dataset[current].jsonHandle){
+  if(dataset[saveIdx].jsonHandle){
     try{
-      const w=await dataset[current].jsonHandle.createWritable();
+      const w=await dataset[saveIdx].jsonHandle.createWritable();
       await w.write(json); await w.close();
+      serverOk=true;
     }catch(e){
       const b=new Blob([json],{type:"application/json"});
-      const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=dataset[current].jsonName; a.click();
+      const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=dataset[saveIdx].jsonName; a.click();
     }
   }
-  modified.delete(current);
-  document.getElementById("unsaved-dot").style.display="none";
+  if(serverOk || dataset[saveIdx].jsonHandle){
+    modified.delete(saveIdx);
+  } else if(!dataset[saveIdx].absPath){
+    // local preview with no handles — keep modified but still mark saved to allow nav
+    modified.delete(saveIdx);
+  }
+  document.getElementById("unsaved-dot").style.display = modified.has(current) ? "inline-block" : "none";
   updateSidebar();
   const si=document.getElementById("save-indicator");
-  si.classList.add("show"); setTimeout(()=>si.classList.remove("show"),2000);
-  // update grid badge
-  const it=serverImages.find(s=>s.file===dataset[current].imgName);
-  if(it){ it.captionFile=dataset[current].jsonName; renderGrid(); }
+  if(serverOk){ si.textContent="✓ Saved"; si.classList.add("show"); setTimeout(()=>{ si.classList.remove("show"); si.textContent="✓ Saved"; },2000); }
+  else if(!dataset[saveIdx].absPath){ si.textContent="✓ Saved (download fallback)"; si.classList.add("show"); setTimeout(()=>si.classList.remove("show"),2000); }
+  else { si.textContent="⚠ Not saved"; si.classList.add("show"); }
+  renderGrid();
 }
 async function saveAll(){
   // save all via server if possible, else download
@@ -1023,16 +1039,21 @@ async function generateForSelected(){
         if(ev.type==="chunk"){ streamed+=ev.text; if(raw) raw.value=streamed; }
         else if(ev.type==="retry"){ streamed=""; if(raw) raw.value=""; }
         else if(ev.type==="done"){
-          if(ev.mode==="ideogram"){ dataset[current].data=ev.prompt; fillForm(ev.prompt); if(raw) raw.value=JSON.stringify(ev.prompt,null,2); }
-          else { const txt=ev.text||""; if(raw) raw.value=txt; // for plain, also update dataset as text?
-          }
-          modified.add(current); document.getElementById("unsaved-dot").style.display="inline-block"; updateSidebar(); drawBboxes();
-          if(saveInd) { saveInd.textContent="Generated ✓"; setTimeout(()=>{ saveInd.classList.remove("show"); saveInd.textContent="Saved"; },2000); }
+          if(ev.mode==="ideogram"){ dataset[current].data=ev.prompt; fillForm(ev.prompt); if(raw) raw.value=JSON.stringify(ev.prompt,null,2); modified.add(current); document.getElementById("unsaved-dot").style.display="inline-block"; updateSidebar(); drawBboxes(); if(saveInd) { saveInd.textContent="Generated ✓ — saving…"; } }
+          else { const txt=ev.text||""; if(raw) raw.value=txt; dataset[current].data={_plain:txt}; modified.add(current); if(saveInd) { saveInd.textContent="Generated ✓"; setTimeout(()=>{ saveInd.classList.remove("show"); saveInd.textContent="Saved"; },2000); } }
+        } else if(ev.type==="error"){ alert(ev.message); if(raw) raw.value=ev.message; }
         } else if(ev.type==="error"){ alert(ev.message); if(raw) raw.value=ev.message; }
       }
     }
-  }catch(e){ alert("Generate failed: "+e.message); }
-  finally{ busyGen=false; if(saveInd){ saveInd.classList.remove("show"); saveInd.textContent="Saved"; } }
+    }catch(e){ alert("Generate failed: "+e.message); }
+  finally{
+    busyGen=false;
+    if(saveInd){ saveInd.classList.remove("show"); saveInd.textContent="Saved"; }
+    // auto-save generated JSON to disk
+    if(dataset[current] && dataset[current].data && dataset[current].data.compositional_deconstruction){
+      try{ await saveCurrentJson(); }catch{}
+    }
+  }
 }
 async function generateMissing(){
   // prefer currentFolder, else derive from serverImages/dataset
