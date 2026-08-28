@@ -526,7 +526,7 @@ const server = http.createServer(async (req, res) => {
 
   // ── models upload / download (save to app/models) ───────────────────
   if (req.method === "POST" && url.pathname === "/api/models/upload") {
-    const rawFilename = req.headers["x-filename"] || req.headers["x-filename".toLowerCase?.()] || "model.gguf";
+    const rawFilename = req.headers["x-filename"] || "model.gguf";
     const filename = path.basename(String(rawFilename).trim());
     if (!filename.toLowerCase().endsWith(".gguf")) { sendJson(res, 400, { error: "filename must end with .gguf" }); return; }
     if (filename.includes("..")) { sendJson(res, 400, { error: "invalid filename" }); return; }
@@ -534,13 +534,24 @@ const server = http.createServer(async (req, res) => {
     try { fs.mkdirSync(modelsDir, { recursive: true }); } catch {}
     const dest = path.join(modelsDir, filename);
     try {
-      const buf = await readRaw(req);
-      if (!buf.length) { sendJson(res, 400, { error: "empty file" }); return; }
-      fs.writeFileSync(dest, buf);
+      // Stream to file to handle >2GB models (avoid Buffer limit)
+      const out = fs.createWriteStream(dest);
+      let received = 0;
+      await new Promise((resolve, reject) => {
+        req.on("data", (chunk) => { received += chunk.length; });
+        req.pipe(out);
+        out.on("finish", resolve);
+        out.on("error", reject);
+        req.on("error", reject);
+      });
+      if (received === 0) { try { fs.unlinkSync(dest); } catch {} sendJson(res, 400, { error: "empty file" }); return; }
       // auto restart / start llama-server with new model
       const restart = await restartLlamaServer();
-      sendJson(res, 200, { ok: true, filename, size: buf.length, path: dest, restart });
-    } catch (err) { sendJson(res, 500, { error: String(err.message) }); }
+      sendJson(res, 200, { ok: true, filename, size: received, path: dest, restart });
+    } catch (err) {
+      try { fs.unlinkSync(dest); } catch {}
+      sendJson(res, 500, { error: String(err.message) });
+    }
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/models/download") {
