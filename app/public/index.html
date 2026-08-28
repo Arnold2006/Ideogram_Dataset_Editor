@@ -356,7 +356,28 @@ if(refreshBtn) refreshBtn.addEventListener("click", loadFolder);
 if(generateAllBtn) generateAllBtn.addEventListener("click", generateMissing);
 
 function handleThumbClick(idx){
-  console.log("thumb click", idx, serverImages[idx]?.file, "current before", current);
+  console.log("thumb click", idx, serverImages[idx]?.file, "current before", current, "mode", serverImages[idx]?.absPath===null?"local":"server", "dataset.len", dataset.length);
+  // LOCAL PREVIEW MODE: Browse without Load — serverImages has fileObj, dataset is dummy
+  if(serverImages[idx] && serverImages[idx].absPath===null){
+    // local: directly use selectLocal logic
+    document.querySelectorAll(".thumb").forEach((el,i)=>el.classList.toggle("selected", i===idx));
+    const entry=serverImages[idx];
+    // update center preview directly
+    const wrap=document.getElementById("img-wrap");
+    let img=wrap.querySelector("img");
+    if(!img){ img=document.createElement("img"); wrap.insertBefore(img, wrap.firstChild); }
+    img.src=URL.createObjectURL(entry.fileObj);
+    img.alt=entry.file;
+    document.getElementById("img-name").textContent=entry.file;
+    document.getElementById("img-name").style.display="block";
+    const dz=document.getElementById("drop-zone"); if(dz) dz.style.display="none";
+    const rc=document.getElementById("right-col"); if(rc) rc.style.display="block";
+    // update simple dataset for right col
+    dataset=[{base:entry.file.replace(/\.[^.]+$/,""), imgName:entry.file, jsonName:entry.file.replace(/\.[^.]+$/,"")+".json", jsonHandle:null, imgUrl:img.src, data:{high_level_description:"",style_description:{aesthetics:"",lighting:"",medium:"photograph",color_palette:[]},compositional_deconstruction:{background:"",elements:[]}}, absPath:null}];
+    current=0;
+    fillForm(dataset[0].data);
+    return;
+  }
   if(idx < 0 || idx >= dataset.length){
     const it=serverImages[idx];
     if(it){
@@ -365,7 +386,6 @@ function handleThumbClick(idx){
     }
   }
   if(idx >=0 && idx < dataset.length){
-    // bypass save for instant switch, save in background
     if(modified.has(current)){
       saveCurrentJson().catch(()=>{});
       modified.delete(current);
