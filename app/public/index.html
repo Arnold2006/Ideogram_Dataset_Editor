@@ -128,6 +128,7 @@ textarea:focus,input[type=text]:focus{box-shadow:0 0 0 3px rgba(90,167,255,.25)}
     <span id="nav-btns" style="display:none;gap:4px;align-items:center">
       <button class="tbar-btn" id="btn-prev" onclick="navigate(-1)" disabled><i class="ti ti-chevron-left"></i></button>
       <button class="tbar-btn" id="btn-next" onclick="navigate(1)" disabled><i class="ti ti-chevron-right"></i></button>
+      <button class="tbar-btn primary" id="btn-generate" onclick="generateForSelected()" disabled><i class="ti ti-sparkles"></i> Generate</button>
       <button class="tbar-btn primary" onclick="saveCurrentJson()"><i class="ti ti-device-floppy"></i> Save</button>
       <button class="tbar-btn" onclick="saveAll()"><i class="ti ti-file-zip"></i> Save all</button>
     </span>
@@ -268,7 +269,7 @@ if(browseBtn) browseBtn.addEventListener("click", async e=>{
       await openFolder();
       return;
     }
-  }catch(err){ console.warn("showDirectoryPicker failed, fallback to input:", err); }
+  }catch(err){ console.warn("showDirectoryPicker failed, fallback to input:", err); alert("Choose a folder via the file picker. After picking, type the full Windows path (e.g. D:\\images) in the box above and click Load to enable Save/Generate on disk."); }
   console.log("Fallback folderPicker.click()");
   folderPicker.value="";
   folderPicker.click();
@@ -410,10 +411,13 @@ function renderGrid(){
     card.className="thumb"; card.dataset.idx=idx;
     card.style.cursor="pointer";
     card.style.pointerEvents="auto";
+    card.style.position="relative";
     const imgUrl = it.absPath ? "/api/image?path="+encodeURIComponent(it.absPath) : URL.createObjectURL(it.fileObj);
     const hasCap=!!it.captionFile;
-    card.innerHTML=`<img src="${imgUrl}" alt="" loading="lazy" style="pointer-events:none"><div class="thumb-foot" style="pointer-events:none"><span class="thumb-name">${it.file}</span><span class="thumb-badge ${hasCap?'has':'none'}">${hasCap?'✓ '+it.captionFile:'no caption'}</span></div>`;
+    card.innerHTML=`<img src="${imgUrl}" alt="" loading="lazy" style="pointer-events:none"><button class="thumb-gen" data-gen="${idx}" title="Generate JSON for this image" style="position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:50%;border:0.5px solid rgba(255,255,255,0.7);background:rgba(0,0,0,0.55);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity 0.15s"><i class="ti ti-sparkles" style="font-size:13px"></i></button><div class="thumb-foot" style="pointer-events:none"><span class="thumb-name">${it.file}</span><span class="thumb-badge ${hasCap?'has':'none'}">${hasCap?'✓ '+it.captionFile:'no caption'}</span></div><style>.thumb:hover .thumb-gen{opacity:1 !important}</style>`;
     card.onclick=()=> handleThumbClick(idx);
+    const genBtn=card.querySelector(".thumb-gen");
+    if(genBtn) genBtn.addEventListener("click", (e)=>{ e.stopPropagation(); handleThumbClick(idx); generateForIdx(idx); });
     g.appendChild(card);
   });
   // delegation fallback
@@ -472,6 +476,8 @@ function showEditor(){
   if(pw) pw.style.display="block";
   const imgNameEl=document.getElementById("img-name");
   if(imgNameEl) imgNameEl.style.display="block";
+  const genBtn=document.getElementById("btn-generate");
+  if(genBtn) genBtn.disabled=false;
 }
 async function navigate(dir){
   const n=current+dir;
@@ -958,6 +964,13 @@ function copyRawJson(){
 }
 // ---- Generate (server AI) ----
 let busyGen=false;
+async function generateForIdx(idx){
+  if(idx>=0 && idx < dataset.length && idx!==current){
+    if(modified.has(current)) await saveCurrentJson();
+    current=idx; renderEntry();
+  }
+  await generateForSelected();
+}
 async function generateForSelected(){
   const d=dataset[current];
   if(!d || busyGen) return;
@@ -1008,11 +1021,23 @@ async function generateForSelected(){
   finally{ busyGen=false; if(saveInd){ saveInd.classList.remove("show"); saveInd.textContent="Saved"; } }
 }
 async function generateMissing(){
-  if(!currentFolder){
+  // infer folder if currentFolder not set but server images have absPath
+  let folder = currentFolder;
+  if(!folder && serverImages.length && serverImages[0]?.absPath){
+    const p=serverImages[0].absPath;
+    folder=p.substring(0, p.lastIndexOf("/")) || p.substring(0, p.lastIndexOf("\\")) || p;
+    // normalize: strip filename
+    try{ folder = folder.replace(/\/[^\/]+$/, "").replace(/\\[^\\]+$/, ""); if(!folder) folder=p.substring(0, Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"))); }catch{}
+    // fallback: use dataset absPath
+    if(!folder || folder===p) folder = dataset[0]?.absPath ? dataset[0].absPath.substring(0, dataset[0].absPath.lastIndexOf("/")) : null;
+  }
+  if(!folder){
     if(serverImages.length && serverImages[0]?.absPath===null) alert("Local preview mode — please Load a folder via full Windows path (e.g. D:\\images) to enable batch generate. Use Browse to preview, but Load needs a real path to save sidecars.");
-    else alert("No folder loaded — please enter a folder path like D:\\images and click Load first.");
+    else alert("No folder loaded — please enter a folder path like D:\\images and click Load first. (If you just Loaded, wait for grid to finish.)");
     return;
   }
+  // ensure currentFolder is set for next time
+  currentFolder = folder;
   // check if any missing via dataset
   const missing=dataset.filter(d=>!d.captionFile && !modified.has(dataset.indexOf(d)));
   // fallback to serverImages
