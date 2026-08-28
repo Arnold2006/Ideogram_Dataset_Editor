@@ -366,7 +366,22 @@ function renderGrid(){
     const imgUrl = it.absPath ? "/api/image?path="+encodeURIComponent(it.absPath) : URL.createObjectURL(it.fileObj);
     const hasCap=!!it.captionFile;
     card.innerHTML=`<img src="${imgUrl}" alt="" loading="lazy"><div class="thumb-foot"><span class="thumb-name">${it.file}</span><span class="thumb-badge ${hasCap?'has':'none'}">${hasCap?'✓ '+it.captionFile:'no caption'}</span></div>`;
-    card.addEventListener("click",()=>{ const dsIdx=dataset.findIndex(d=>d.imgName===it.file); if(dsIdx!==-1){ goTo(dsIdx); } else { const sIdx=serverImages.findIndex(s=>s.file===it.file); if(sIdx!==-1) selectImage(sIdx); }});
+    card.addEventListener("click", async ()=>{
+      console.log("thumb click", idx, it.file, "dataset.len", dataset.length);
+      // dataset and serverImages are parallel after Load, so idx is correct
+      if(dataset[idx] && dataset[idx].imgName===it.file){
+        await goTo(idx);
+      } else {
+        const dsIdx=dataset.findIndex(d=>d.imgName===it.file);
+        if(dsIdx!==-1){ await goTo(dsIdx); }
+        else { await selectImage(idx); }
+      }
+      // re-highlight after navigation
+      document.querySelectorAll(".thumb").forEach((el,i)=>{
+        const it2=serverImages[i];
+        el.classList.toggle("selected", dataset[current] && dataset[current].imgName===it2.file);
+      });
+    });
     g.appendChild(card);
   });
   // highlight
