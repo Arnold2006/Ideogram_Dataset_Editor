@@ -260,7 +260,19 @@ pollHealth();
 const folderInput=document.getElementById("folderInput"), folderPicker=document.getElementById("folderPicker"), grid=document.getElementById("grid"), emptyState=document.getElementById("emptyState"), folderCount=document.getElementById("folderCount");
 const browseBtn=document.getElementById("browseBtn"), loadBtn=document.getElementById("loadBtn"), generateAllBtn=document.getElementById("generateAllBtn"), refreshBtn=document.getElementById("refreshBtn"), steeringInput=document.getElementById("steeringInput");
 
-if(browseBtn) browseBtn.addEventListener("click", e=>{ e.preventDefault(); if(window.showDirectoryPicker){ openFolder(); } else { folderPicker.value=""; folderPicker.click(); } });
+if(browseBtn) browseBtn.addEventListener("click", async e=>{
+  e.preventDefault();
+  console.log("Browse clicked");
+  try{
+    if(window.showDirectoryPicker){
+      await openFolder();
+      return;
+    }
+  }catch(err){ console.warn("showDirectoryPicker failed, fallback to input:", err); }
+  console.log("Fallback folderPicker.click()");
+  folderPicker.value="";
+  folderPicker.click();
+});
 if(folderPicker) folderPicker.addEventListener("change", ()=>{
   const files=Array.from(folderPicker.files||[]);
   if(!files.length) return;
