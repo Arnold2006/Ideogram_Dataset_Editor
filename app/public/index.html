@@ -116,7 +116,7 @@
 <header>
   <div class="brand">
     <svg viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="140" height="140" rx="22" fill="#1a1a2e"/><polyline points="22,42 22,22 42,22" stroke="#f97316" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round"/><polyline points="98,22 118,22 118,42" stroke="#f97316" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round"/><polyline points="22,98 22,118 42,118" stroke="#f97316" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round"/><polyline points="98,118 118,118 118,98" stroke="#f97316" stroke-width="9" fill="none" stroke-linecap="round" stroke-linejoin="round"/><polyline points="48,62 48,48 62,48" stroke="#22d3ee" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><polyline points="78,48 92,48 92,62" stroke="#22d3ee" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><polyline points="48,78 48,92 62,92" stroke="#22d3ee" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><polyline points="78,92 92,92 92,78" stroke="#22d3ee" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="70" cy="70" r="5" fill="#facc15"/><circle cx="58" cy="62" r="3" fill="#facc15" opacity="0.75"/><circle cx="82" cy="61" r="3.5" fill="#facc15" opacity="0.8"/><circle cx="79" cy="80" r="2.5" fill="#facc15" opacity="0.6"/><circle cx="60" cy="79" r="3" fill="#facc15" opacity="0.65"/></svg>
-    <span class="brand-name">Frame<span>Forge</span> <small style="font-weight:400;color:var(--muted);font-size:11px;margin-left:6px;letter-spacing:0.06em;text-transform:uppercase">Portable</small></span>
+    <span class="brand-name">Ideogram4 <span>Dataset Editor</span></span>
   </div>
   <div class="header-controls">
     <select id="modeSelect" class="mode-select" title="Generation target">
@@ -249,18 +249,23 @@ document.querySelectorAll(".ar-btn").forEach(btn => {
 });
 
 // ── folder loading ────────────────────────────────────────────────────────
-browseBtn.addEventListener("click", () => folderPicker.click());
+browseBtn.addEventListener("click", (e) => {
+  e.preventDefault();
+  console.log("Browse clicked");
+  folderPicker.value = ""; // reset to allow re-selecting same folder
+  folderPicker.click();
+});
 folderPicker.addEventListener("change", () => {
-  // webkitdirectory gives fake path, but we can show client-side grid without server.
-  // For portable server mode, we still need real disk path. So we attempt to infer
-  // folder name and show local previews via object URLs, and allow editing via download.
-  // If server is running, prefer server path input. For now, handle local file list.
+  console.log("folderPicker change", folderPicker.files?.length);
   const files = Array.from(folderPicker.files || []);
-  if (!files.length) return;
-  // Try to extract folder path hint: first file's webkitRelativePath
+  if (!files.length) {
+    console.log("No files selected");
+    return;
+  }
   const rel = files[0].webkitRelativePath || "";
   const folderName = rel.split("/")[0] || "selected folder";
   folderInput.value = folderName + "  (local preview — use full path for Save)";
+  console.log("Rendering local grid", files.length);
   renderLocalGrid(files);
 });
 
@@ -300,27 +305,28 @@ function selectLocal(idx) {
 
 async function loadFolder() {
   const p = folderInput.value.trim();
-  if (!p) return;
-  // Heuristic: if input looks like local preview placeholder, ignore
-  if (p.includes("(local preview")) return;
+  console.log("Load clicked, path:", p);
+  if (!p) { alert("Please enter a folder path or use Browse"); return; }
+  if (p.includes("(local preview")) {
+    alert("Local preview mode — to Save sidecars to disk, please type the full Windows path (e.g. D:\\images) and click Load again");
+    return;
+  }
   loadBtn.disabled=true; loadBtn.classList.add("busy"); loadText.textContent="Loading";
   try {
+    console.log("Fetching /api/list", p);
     const res = await fetch("/api/list", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ folderPath: p }) });
     const data = await res.json();
+    console.log("List response", res.status, data);
     if (!res.ok) throw new Error(data.error || res.statusText);
     currentFolder = data.folder;
     folderInput.value = currentFolder;
-    images = data.images.map(it => ({ ...it, absPath: currentFolder + "\\" + it.file }));
-    // Normalize for Windows: server already returns absolute with correct sep, use join
-    // But server used path.resolve; we trust folder + file. Better reconstruct via data.folder
-    images = data.images.map(it => ({ ...it, absPath: data.folder.replace(/\/g,"\\") ? data.folder + "\\" + it.file : it.file }));
-    // Actually use forward slash for API: /api/image?path= requires absolute path with OS sep — encodeURI handles it
-    // Rebuild absPath properly using data.folder
     images = data.images.map(it => ({ ...it, absPath: data.folder + "/" + it.file }));
     renderGrid();
     folderCount.textContent = data.count + " images" + (data.count ? " — click to edit" : "");
     folderMeta.style.display="";
+    emptyState.style.display="none";
   } catch (e) {
+    console.error("loadFolder error", e);
     alert("Could not load folder: " + e.message);
   } finally {
     loadBtn.disabled=false; loadBtn.classList.remove("busy"); loadText.textContent="Load";
