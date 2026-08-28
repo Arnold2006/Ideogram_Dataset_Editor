@@ -269,7 +269,7 @@ if(browseBtn) browseBtn.addEventListener("click", async e=>{
       await openFolder();
       return;
     }
-  }catch(err){ console.warn("showDirectoryPicker failed, fallback to input:", err); alert("Choose a folder via the file picker. After picking, type the full Windows path (e.g. D:\\images) in the box above and click Load to enable Save/Generate on disk."); }
+  }catch(err){ console.warn("showDirectoryPicker failed, fallback to input:", err); }
   console.log("Fallback folderPicker.click()");
   folderPicker.value="";
   folderPicker.click();
