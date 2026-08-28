@@ -129,25 +129,53 @@ function hoistToBinRoot(binDir) {
 
 // ── fetch release info ────────────────────────────────────────────────────────
 console.log("Fetching latest llama.cpp release info...");
-const release = JSON.parse(await getText("https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"));
+let release = JSON.parse(await getText("https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"));
 console.log(`Latest release: ${release.tag_name}`);
+
+// Helper to find a suitable Windows asset in a release (CUDA preferred, CPU fallback)
+function findWindowsAsset(rel) {
+  if (!rel || !Array.isArray(rel.assets)) return null;
+  // Try CUDA 12.4 first, then any cuda, then any win x64
+  const candidates = [
+    a => isSupportedArchive(a.name) && a.name.includes("win") && a.name.includes("cuda-12.4") && a.name.includes("x64") && !a.name.startsWith("cudart-"),
+    a => isSupportedArchive(a.name) && a.name.includes("win") && a.name.includes("cuda") && a.name.includes("x64") && !a.name.startsWith("cudart-"),
+    a => isSupportedArchive(a.name) && a.name.includes("win") && a.name.includes("x64") && !a.name.startsWith("cudart-"),
+  ];
+  for (const pred of candidates) {
+    const asset = rel.assets.find(pred);
+    if (asset) return asset;
+  }
+  return null;
+}
+
+// If latest has no suitable asset (e.g. v0.3.0 nightly-tag.txt only), scan recent releases
+let cudaAsset = IS_WINDOWS ? findWindowsAsset(release) : null;
+if (IS_WINDOWS && !cudaAsset) {
+  console.log(`Latest ${release.tag_name} has no Windows x64 zip — scanning recent releases...`);
+  try {
+    const list = JSON.parse(await getText("https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=20"));
+    for (const rel of list) {
+      const cand = findWindowsAsset(rel);
+      if (cand) {
+        release = rel;
+        cudaAsset = cand;
+        console.log(`Found usable release: ${rel.tag_name} → ${cand.name}`);
+        break;
+      }
+    }
+  } catch (e) {
+    console.warn("Failed to scan releases list:", e.message);
+  }
+  if (!cudaAsset) {
+    const avail = (release.assets || []).map(a => a.name).join("\n");
+    console.error("Available assets in latest:\n" + (avail || "(none)"));
+    throw new Error("Could not find a Windows x64 zip (CUDA or CPU). Latest usable may be pinned to an older tag — check https://github.com/ggml-org/llama.cpp/releases");
+  }
+}
 
 if (IS_WINDOWS) {
   // ── Windows: CUDA 12.4 binary + cudart DLLs ──────────────────────────────
-
-  // Matches: llama-bXXXX-bin-win-cuda-12.4-x64.zip  (not cudart-)
-  const cudaAsset = release.assets.find(a =>
-    isSupportedArchive(a.name) &&
-    a.name.includes("win") &&
-    a.name.includes("cuda-12.4") &&
-    a.name.includes("x64") &&
-    !a.name.startsWith("cudart-")
-  );
-
-  if (!cudaAsset) {
-    console.error("Available assets:\n" + release.assets.map(a => a.name).join("\n"));
-    throw new Error("Could not find a CUDA 12.4 Windows x64 zip. Check the asset list above.");
-  }
+  // cudaAsset already resolved above
 
   // cudart DLL zip (needed if CUDA toolkit isn't installed)
   const cudartAsset = release.assets.find(a =>
