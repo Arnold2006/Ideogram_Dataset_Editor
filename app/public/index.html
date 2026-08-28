@@ -31,12 +31,13 @@
   .status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
   .status .dot { width: 7px; height: 7px; border-radius: 50%; background: #d4d4d4; }
   .status.ready .dot { background: var(--green); }
-  /* layout — left fits exactly 3x200px (648px) */
+  /* layout — 3 columns: left 2x200 (436px), center preview, right editor */
   .app-body { flex: 1; display: flex; min-height: 0; overflow: hidden; }
-  .left-pane { flex: 0 0 648px; width: 648px; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--bg); overflow: hidden; }
-  .right-pane { flex: 1; min-width: 360px; display: flex; flex-direction: column; background: var(--card); overflow: hidden; }
-  @media (max-width: 1100px) { .left-pane { flex: 0 0 648px; width: 648px; } }
-  @media (max-width: 900px) { .app-body { flex-direction: column; } .right-pane { min-width: 0; } .left-pane { flex: none; width: 100%; height: 50%; } }
+  .left-pane { flex: 0 0 436px; width: 436px; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); background: var(--bg); overflow: hidden; }
+  .center-pane { flex: 1; min-width: 360px; display: flex; flex-direction: column; background: #0a0a0a; overflow: hidden; border-right: 1px solid var(--border); }
+  .right-pane { flex: 0 0 440px; width: 440px; min-width: 320px; display: flex; flex-direction: column; background: var(--card); overflow: hidden; }
+  @media (max-width: 1200px) { .left-pane { flex: 0 0 436px; width: 436px; } .right-pane { flex: 0 0 380px; width: 380px; } }
+  @media (max-width: 900px) { .app-body { flex-direction: column; } .left-pane { flex: none; width: 100%; height: 35%; } .center-pane { flex: none; height: 40%; } .right-pane { flex: 1; width: 100%; min-width: 0; } }
   /* folder bar */
   .folder-bar { display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--card); flex-shrink: 0; align-items: center; }
   .folder-input { flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--code-bg); color: var(--fg); outline: 0; }
@@ -53,9 +54,9 @@
   .ar-label { font-size: 11px; color: var(--muted); flex-shrink: 0; }
   .ar-btn { font: 12px/1 inherit; color: var(--muted); background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; cursor: pointer; flex-shrink: 0; white-space: nowrap; }
   .ar-btn.active { color: var(--accent-fg); background: var(--accent); border-color: var(--accent); }
-  /* grid — 200x200px thumbs, 3 columns */
+  /* grid — 200x200px thumbs, 2 columns (far left) */
   .grid-wrap { flex: 1; overflow-y: auto; padding: 12px; min-height: 0; }
-  .grid { display: grid; grid-template-columns: repeat(3, 200px); gap: 12px; justify-content: start; }
+  .grid { display: grid; grid-template-columns: repeat(2, 200px); gap: 12px; justify-content: start; }
   @media (max-width: 700px) { .grid { grid-template-columns: repeat(2, 200px); } }
   .thumb { width: 200px; position: relative; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--card); cursor: pointer; transition: border-color 0.12s, box-shadow 0.12s; display: flex; flex-direction: column; }
   .thumb:hover { border-color: var(--muted); }
@@ -91,6 +92,15 @@
   .structured-editor { display: none; flex-direction: column; gap: 10px; padding: 12px; border-top: 1px solid var(--border); background: var(--card); max-height: 42vh; overflow-y: auto; }
   .structured-editor.show { display: flex; }
   .structured-editor .section-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 6px 0 2px; }
+  /* collapsible right sections — like screenshot Overview/Style/Composition/Elements */
+  .collapsible-section { border-bottom: 1px solid var(--border); background: var(--card); }
+  .collapsible-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 600; color: var(--fg); }
+  .collapsible-header:hover { background: var(--code-bg); }
+  .collapsible-arrow { margin-left: auto; font-size: 12px; color: var(--muted); transition: transform 0.15s; }
+  .collapsible-section.collapsed .collapsible-arrow { transform: rotate(-90deg); }
+  .collapsible-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .collapsible-section.collapsed .collapsible-body { display: none; }
+  .right-scroll { flex: 1; overflow-y: auto; display: flex; flex-direction: column; background: var(--card); }
   .meta-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
   .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 3px 8px; }
   .badge.valid { color: var(--green); background: var(--green-bg); }
@@ -194,6 +204,17 @@
     </div>
   </section>
 
+  <section class="center-pane" id="centerPane">
+    <div class="preview-wrap" id="previewWrap" style="flex:1; overflow:auto; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:12px; background:#0a0a0a; border: none;">
+      <div class="preview-bbox-container" id="previewBboxContainer">
+        <img id="previewImg" src="" alt="">
+        <div id="canvas" class="canvas"></div>
+      </div>
+      <div class="layout-controls" id="layoutControls"><button id="addBoxBtn">+ Add Element</button></div>
+      <div class="layout-hint" id="layoutHint">drag to move · pull corner to resize · click × to delete — bbox overlaid on preview (bigger)</div>
+      <div id="centerFileName" style="font-size:11px;color:var(--muted);margin-top:8px; text-align:center"></div>
+    </div>
+  </section>
   <section class="right-pane" id="rightPane">
     <div class="editor-head">
       <div class="editor-title">
@@ -212,39 +233,54 @@
         <button id="deleteBtn" class="btn btn-ghost btn-sm" disabled style="color:var(--red)">Delete caption</button>
       </div>
     </div>
-    <div class="preview-wrap" id="previewWrap">
-      <div class="preview-bbox-container" id="previewBboxContainer">
-        <img id="previewImg" src="" alt="">
-        <div id="canvas" class="canvas"></div>
+    <div id="rightScroll" class="right-scroll">
+      <div class="collapsible-section" data-section="overview">
+        <div class="collapsible-header" data-toggle="overview"><span>≡ Overview</span><span class="collapsible-arrow">▾</span></div>
+        <div class="collapsible-body" id="sectionOverview">
+          <div class="section-title">HIGH-LEVEL DESCRIPTION</div>
+          <textarea id="fieldHighLevel" rows="3" placeholder="one or two sentences summarizing entire image" style="width:100%; min-height:70px; font-size:12px; padding:8px; border:1px solid var(--border); border-radius:8px; background:var(--code-bg); color:var(--fg); resize:vertical"></textarea>
+        </div>
       </div>
-      <div class="layout-controls" id="layoutControls"><button id="addBoxBtn">+ Add Element</button></div>
-      <div class="layout-hint" id="layoutHint">drag to move · pull corner to resize · click × to delete — bbox overlaid on preview (bigger)</div>
-    </div>
-    <div id="structuredEditor" class="structured-editor" style="display:none">
-      <div class="section-title">high_level_description</div>
-      <textarea id="fieldHighLevel" rows="2" placeholder="one or two sentences summarizing entire image"></textarea>
-      <div class="section-title">style_description</div>
-      <input id="fieldAesthetics" placeholder="aesthetics (comma-separated)">
-      <input id="fieldLighting" placeholder="lighting">
-      <input id="fieldMedium" placeholder="medium (photograph, illustration, 3d_render, etc)">
-      <input id="fieldPhoto" placeholder="photo (camera/lens) — for photograph medium">
-      <input id="fieldArtStyle" placeholder="art_style — for non-photograph medium">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        <span style="font-size:11px;color:var(--muted)">color_palette:</span>
-        <span id="fieldStylePalette" style="display:flex;gap:4px;flex-wrap:wrap"></span>
-        <button id="addStyleColor" style="font-size:11px;padding:2px 6px;border:1px dashed var(--border);border-radius:999px;background:transparent;cursor:pointer">+ color</button>
+      <div class="collapsible-section collapsed" data-section="style">
+        <div class="collapsible-header" data-toggle="style"><span>◉ Style</span><span class="collapsible-arrow">▸</span></div>
+        <div class="collapsible-body" id="sectionStyle" style="display:none">
+          <input id="fieldAesthetics" placeholder="aesthetics (comma-separated)" style="width:100%; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:var(--code-bg); margin-bottom:6px">
+          <input id="fieldLighting" placeholder="lighting" style="width:100%; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:var(--code-bg); margin-bottom:6px">
+          <input id="fieldMedium" placeholder="medium (photograph, illustration, 3d_render, etc)" style="width:100%; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:var(--code-bg); margin-bottom:6px">
+          <input id="fieldPhoto" placeholder="photo (camera/lens) — for photograph medium" style="width:100%; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:var(--code-bg); margin-bottom:6px">
+          <input id="fieldArtStyle" placeholder="art_style — for non-photograph medium" style="width:100%; font-size:12px; padding:6px 8px; border:1px solid var(--border); border-radius:6px; background:var(--code-bg); margin-bottom:6px">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center; margin-top:4px">
+            <span style="font-size:11px;color:var(--muted)">color_palette:</span>
+            <span id="fieldStylePalette" style="display:flex;gap:4px;flex-wrap:wrap"></span>
+            <button id="addStyleColor" style="font-size:11px;padding:2px 6px;border:1px dashed var(--border);border-radius:999px;background:transparent;cursor:pointer">+ color</button>
+          </div>
+        </div>
       </div>
-      <div class="section-title">compositional_deconstruction.background</div>
-      <textarea id="fieldBackground" rows="2" placeholder="environment/setting behind elements"></textarea>
-      <div class="section-title">elements — edit below (bboxes draggable on preview)</div>
-    </div>
-    <div id="elementList" class="element-list" style="display:none"></div>
-    <div class="editor-body">
-      <textarea id="editArea" class="edit-area" placeholder="Select an image on the left. If a caption exists it will load here; otherwise click Generate to create one, then edit and Save." spellcheck="false"></textarea>
-      <div class="plain-hint" id="plainHint" style="display:none">Plain text mode — saved as <code>.txt</code> next to the image. JSON mode — validated against Ideogram 4 schema, saved as <code>.json</code>.</div>
-      <pre id="jsonPreview"></pre>
+      <div class="collapsible-section" data-section="composition">
+        <div class="collapsible-header" data-toggle="composition"><span>⊞ Composition</span><span class="collapsible-arrow">▾</span></div>
+        <div class="collapsible-body" id="sectionComposition">
+          <div class="section-title">BACKGROUND</div>
+          <textarea id="fieldBackground" rows="3" placeholder="environment/setting behind elements" style="width:100%; min-height:70px; font-size:12px; padding:8px; border:1px solid var(--border); border-radius:8px; background:var(--code-bg); color:var(--fg); resize:vertical"></textarea>
+        </div>
+      </div>
+      <div class="collapsible-section collapsed" data-section="elements">
+        <div class="collapsible-header" data-toggle="elements"><span>◉ Elements</span><span id="elementsCount" style="margin-left:6px; font-size:11px; color:var(--muted); background:var(--border); padding:1px 6px; border-radius:999px">0</span><span class="collapsible-arrow" style="margin-left:auto">▸</span></div>
+        <div class="collapsible-body" id="sectionElements" style="display:none">
+          <div id="elementList" class="element-list" style="display:flex; border:none; max-height:none; padding:0; background:transparent"></div>
+        </div>
+      </div>
+      <div class="collapsible-section" data-section="raw">
+        <div class="collapsible-header" data-toggle="raw"><span>{} Raw JSON</span><span class="collapsible-arrow" style="margin-left:auto">▸</span></div>
+        <div class="collapsible-body" id="sectionRaw" style="display:none; flex-direction:column; gap:6px">
+          <textarea id="editArea" class="edit-area" placeholder="Select an image on the left. If a caption exists it will load here; otherwise click Generate to create one, then edit and Save." spellcheck="false" style="min-height:200px; width:100%; font-size:12px; padding:10px; border:1px solid var(--border); border-radius:8px; background:var(--code-bg);"></textarea>
+          <div class="plain-hint" id="plainHint" style="display:none">Plain text mode — saved as <code>.txt</code> next to the image. JSON mode — validated against Ideogram 4 schema, saved as <code>.json</code>.</div>
+          <pre id="jsonPreview" style="max-height:180px; margin:0"></pre>
+        </div>
+      </div>
     </div>
     <div class="canvas-wrap" id="canvasWrap" style="display:none"></div>
+    <!-- keep structuredEditor hidden for backwards compat (fields moved to collapsible) -->
+    <div id="structuredEditor" class="structured-editor" style="display:none"></div>
   </section>
 </div>
 
@@ -419,6 +455,7 @@ function selectLocal(idx) {
   const entry = images[idx];
   selected = { file: entry.file, absPath: null, fileObj: entry.fileObj, ext: entry.file.split(".").pop().toLowerCase() };
   editorFile.textContent = entry.file;
+  const cf = document.getElementById("centerFileName"); if (cf) cf.textContent = entry.file;
   previewWrap.classList.add("has");
   previewImg.src = URL.createObjectURL(entry.fileObj);
   editArea.value = ""; currentJson=null; isDirty=false;
@@ -490,6 +527,7 @@ async function selectImage(idx) {
   const it = images[idx];
   selected = { file: it.file, absPath: it.absPath, ext: it.file.split(".").pop().toLowerCase() };
   editorFile.textContent = it.file + (it.captionFile ? "  ·  " + it.captionFile : "  ·  no caption");
+  const cf2 = document.getElementById("centerFileName"); if (cf2) cf2.textContent = it.file;
   previewWrap.classList.add("has");
   previewImg.src = "/api/image?path=" + encodeURIComponent(it.absPath) + "&t=" + Date.now();
   editArea.value = ""; currentJson=null; jsonPreview.classList.remove("show");
@@ -559,11 +597,33 @@ function updateCanvasVisibility(){
   if (lc) lc.style.display = isIdeogram ? "flex" : "none";
   const lh = document.getElementById("layoutHint");
   if (lh) lh.style.display = isIdeogram ? "block" : "none";
-  if (elList) elList.style.display = isIdeogram ? "flex" : "none";
-  if (structuredEditor) structuredEditor.style.display = isIdeogram ? "flex" : "none";
+  const rightScroll = document.getElementById("rightScroll");
+  if (rightScroll) rightScroll.style.display = "flex";
+  // toggle collapsible sections: overview/style/composition/elements only for ideogram, raw always
+  document.querySelectorAll('.collapsible-section[data-section="overview"], .collapsible-section[data-section="style"], .collapsible-section[data-section="composition"], .collapsible-section[data-section="elements"]').forEach(sec=>{
+    sec.style.display = isIdeogram ? "" : "none";
+  });
+  const ec = document.getElementById("elementsCount");
+  if (ec) ec.textContent = isIdeogram ? (currentJson?.compositional_deconstruction?.elements?.length || 0) : "0";
   if (isIdeogram) { renderLayout(); renderElementList(); renderStructuredEditor(); }
-  else { canvas.innerHTML=""; if(elList) elList.innerHTML=""; }
+  else { canvas.innerHTML=""; if(elList) elList.innerHTML=""; if(structuredEditor) structuredEditor.innerHTML=""; }
+  // ensure canvas overlay is visible only when preview has image
+  const previewWrap = document.getElementById("previewWrap");
+  if (previewWrap && !previewWrap.classList.contains("has")) {
+    if (canvas) canvas.style.display="none";
+  }
 }
+// collapsible right sections — like screenshot
+document.querySelectorAll(".collapsible-header").forEach(h=>{
+  h.addEventListener("click", ()=>{
+    const sec = h.closest(".collapsible-section");
+    sec.classList.toggle("collapsed");
+    const body = sec.querySelector(".collapsible-body");
+    const arrow = h.querySelector(".collapsible-arrow");
+    if (body) body.style.display = sec.classList.contains("collapsed") ? "none" : "flex";
+    if (arrow) arrow.textContent = sec.classList.contains("collapsed") ? "▸" : "▾";
+  });
+});
 function renderElementList(){
   const elList = document.getElementById("elementList");
   if (!elList || !currentJson || !currentJson.compositional_deconstruction) return;
