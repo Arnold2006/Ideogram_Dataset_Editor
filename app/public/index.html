@@ -76,10 +76,13 @@
   .canvas-wrap { display: none; }
   .element-list { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; max-height: 280px; overflow-y: auto; border-top: 1px solid var(--border); background: var(--card); }
   .element-row { display: grid; grid-template-columns: 36px 1fr auto; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--code-bg); align-items: start; }
-  .element-row .el-idx { font-size: 11px; font-weight: 700; color: var(--muted); padding-top: 6px; }
+  .element-row.collapsed .el-details { display: none; }
+  .element-row .el-idx { font-size: 11px; font-weight: 700; color: var(--muted); padding-top: 2px; display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .element-row .el-toggle { background: none; border: 1px solid var(--border); border-radius: 6px; width: 22px; height: 22px; font-size: 12px; line-height: 1; cursor: pointer; display:flex; align-items:center; justify-content:center; }
   .element-row input, .element-row textarea { font: inherit; font-size: 12px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--fg); }
   .element-row .bbox-inputs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
   .element-row .el-actions { display: flex; flex-direction: column; gap: 4px; }
+  .el-summary { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .structured-editor { display: none; flex-direction: column; gap: 10px; padding: 12px; border-top: 1px solid var(--border); background: var(--card); max-height: 380px; overflow-y: auto; }
   .structured-editor.show { display: flex; }
   .structured-editor .section-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin: 6px 0 2px; }
@@ -560,25 +563,43 @@ function renderElementList(){
   const elList = document.getElementById("elementList");
   if (!elList || !currentJson || !currentJson.compositional_deconstruction) return;
   const els = currentJson.compositional_deconstruction.elements || [];
+  // add collapse/expand all bar if multiple
   elList.innerHTML="";
+  if (els.length>1) {
+    const bar=document.createElement("div");
+    bar.style.cssText="display:flex;gap:6px;justify-content:flex-end;padding:2px 4px";
+    bar.innerHTML=`<button id="expandAllEls" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:6px;background:var(--card);cursor:pointer">Expand all</button><button id="collapseAllEls" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:6px;background:var(--card);cursor:pointer">Collapse all</button>`;
+    elList.appendChild(bar);
+    bar.querySelector("#expandAllEls").addEventListener("click", ()=>{ els.forEach(e=>e._collapsed=false); renderElementList(); });
+    bar.querySelector("#collapseAllEls").addEventListener("click", ()=>{ els.forEach(e=>e._collapsed=true); renderElementList(); });
+  }
   els.forEach((el, idx)=>{
+    if (el._collapsed===undefined) el._collapsed=true; // default collapsed for overview
+    const summary = `${(el.desc||"").slice(0,48)}${(el.desc||"").length>48?"…":""} · [${(el.bbox||[]).join(", ")}]`;
     const row = document.createElement("div");
-    row.className="element-row";
+    row.className="element-row"+(el._collapsed?" collapsed":"");
     row.innerHTML=`
-      <div class="el-idx">#${idx+1}<br><small style="color:var(--muted)">${el.type}</small></div>
+      <div class="el-idx">
+        <button class="el-toggle" data-toggle="${idx}" title="${el._collapsed?"Expand":"Collapse"}">${el._collapsed?"▸":"▾"}</button>
+        <div style="font-size:11px;font-weight:700">#${idx+1}</div>
+        <small style="color:var(--muted)">${el.type}</small>
+      </div>
       <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
-        ${el.type==="text" ? `<input data-idx="${idx}" data-field="text" value="${(el.text||"").replace(/"/g,"&quot;")}" placeholder="text to render">` : ""}
-        <textarea data-idx="${idx}" data-field="desc" placeholder="desc (appearance, pose, relation)" rows="2">${(el.desc||"").replace(/</g,"&lt;")}</textarea>
-        <div class="bbox-inputs">
-          <input data-idx="${idx}" data-bbox="0" type="number" min="0" max="1000" value="${el.bbox?el.bbox[0]:""}" placeholder="y_min">
-          <input data-idx="${idx}" data-bbox="1" type="number" min="0" max="1000" value="${el.bbox?el.bbox[1]:""}" placeholder="x_min">
-          <input data-idx="${idx}" data-bbox="2" type="number" min="0" max="1000" value="${el.bbox?el.bbox[2]:""}" placeholder="y_max">
-          <input data-idx="${idx}" data-bbox="3" type="number" min="0" max="1000" value="${el.bbox?el.bbox[3]:""}" placeholder="x_max">
-        </div>
-        <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
-          <small style="color:var(--muted)">palette:</small>
-          <span class="el-palette" data-idx="${idx}" style="display:flex;gap:4px;flex-wrap:wrap"></span>
-          <button data-add-color="${idx}" style="font-size:11px;padding:2px 6px;border:1px dashed var(--border);border-radius:999px;background:transparent;cursor:pointer">+ color</button>
+        <div class="el-summary" title="${(el.desc||"").replace(/"/g,"&quot;")}">${summary}</div>
+        <div class="el-details" style="display:${el._collapsed?"none":"flex"};flex-direction:column;gap:4px">
+          ${el.type==="text" ? `<input data-idx="${idx}" data-field="text" value="${(el.text||"").replace(/"/g,"&quot;")}" placeholder="text to render">` : ""}
+          <textarea data-idx="${idx}" data-field="desc" placeholder="desc (appearance, pose, relation)" rows="2">${(el.desc||"").replace(/</g,"&lt;")}</textarea>
+          <div class="bbox-inputs">
+            <input data-idx="${idx}" data-bbox="0" type="number" min="0" max="1000" value="${el.bbox?el.bbox[0]:""}" placeholder="y_min">
+            <input data-idx="${idx}" data-bbox="1" type="number" min="0" max="1000" value="${el.bbox?el.bbox[1]:""}" placeholder="x_min">
+            <input data-idx="${idx}" data-bbox="2" type="number" min="0" max="1000" value="${el.bbox?el.bbox[2]:""}" placeholder="y_max">
+            <input data-idx="${idx}" data-bbox="3" type="number" min="0" max="1000" value="${el.bbox?el.bbox[3]:""}" placeholder="x_max">
+          </div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+            <small style="color:var(--muted)">palette:</small>
+            <span class="el-palette" data-idx="${idx}" style="display:flex;gap:4px;flex-wrap:wrap"></span>
+            <button data-add-color="${idx}" style="font-size:11px;padding:2px 6px;border:1px dashed var(--border);border-radius:999px;background:transparent;cursor:pointer">+ color</button>
+          </div>
         </div>
       </div>
       <div class="el-actions">
@@ -586,6 +607,8 @@ function renderElementList(){
       </div>
     `;
     elList.appendChild(row);
+    const toggle=row.querySelector("[data-toggle]");
+    toggle.addEventListener("click", ()=>{ el._collapsed=!el._collapsed; renderElementList(); });
     // palette swatches
     const palWrap = row.querySelector(".el-palette");
     (el.color_palette||[]).forEach((hex, pi)=>{
@@ -862,7 +885,7 @@ function renderLayout(){
     const idx=currentJson.compositional_deconstruction.elements.indexOf(el); const color=BOX_COLORS[idx % BOX_COLORS.length];
     d.style.borderColor=color; d.style.background=color+"33";
     const tag=document.createElement("span"); tag.className="tag"; tag.textContent=el.type==="text"&&el.text? "“"+el.text+"”" : String(el.desc||el.type).split(/[,.]/)[0].split(/\s+/).slice(0,3).join(" "); d.appendChild(tag);
-    const delBtn=document.createElement("button"); delBtn.className="delete-btn"; delBtn.textContent="×"; delBtn.title="Delete element"; delBtn.addEventListener("click", e=>{ e.stopPropagation(); const elIdx=currentJson.compositional_deconstruction.elements.indexOf(el); if(elIdx!==-1){ currentJson.compositional_deconstruction.elements.splice(elIdx,1); activeBbox=null; editArea.value=JSON.stringify(currentJson,null,2); renderLayout(); renderJsonPreview(); isDirty=true; } }); d.appendChild(delBtn);
+    const delBtn=document.createElement("button"); delBtn.className="delete-btn"; delBtn.textContent="×"; delBtn.title="Delete element"; delBtn.addEventListener("click", e=>{ e.stopPropagation(); const elIdx=currentJson.compositional_deconstruction.elements.indexOf(el); if(elIdx!==-1){ currentJson.compositional_deconstruction.elements.splice(elIdx,1); activeBbox=null; editArea.value=JSON.stringify(currentJson,null,2); renderLayout(); renderElementList(); renderStructuredEditor(); renderJsonPreview(); isDirty=true; setBadge("valid","✓ Valid JSON (unsaved) — element deleted"); } }); d.appendChild(delBtn);
     const colorWrap=document.createElement("span"); colorWrap.className="color-pick"; if(!Array.isArray(el.color_palette)) el.color_palette=[];
     function rebuildPalette(){ colorWrap.innerHTML=""; el.color_palette.forEach((hex,pi)=>{ const sw=document.createElement("span"); sw.className="palette-swatch"; sw.style.background=hex; const inp=document.createElement("input"); inp.type="color"; inp.value=hex; inp.title="Edit palette color"; inp.addEventListener("input", e=>{ e.stopPropagation(); el.color_palette[pi]=e.target.value.toUpperCase(); sw.style.background=e.target.value; editArea.value=JSON.stringify(currentJson,null,2); renderJsonPreview(); isDirty=true; }); inp.addEventListener("pointerdown", e=>e.stopPropagation()); sw.appendChild(inp); sw.addEventListener("contextmenu", e=>{ e.preventDefault(); e.stopPropagation(); el.color_palette.splice(pi,1); rebuildPalette(); editArea.value=JSON.stringify(currentJson,null,2); renderJsonPreview(); isDirty=true; }); colorWrap.appendChild(sw); }); if(el.color_palette.length<5){ const addBtn=document.createElement("button"); addBtn.className="palette-add"; addBtn.textContent="+"; addBtn.title="Add palette color (right-click swatch to remove)"; addBtn.addEventListener("pointerdown", e=>e.stopPropagation()); addBtn.addEventListener("click", e=>{ e.stopPropagation(); el.color_palette.push("#FFFFFF"); rebuildPalette(); editArea.value=JSON.stringify(currentJson,null,2); renderJsonPreview(); isDirty=true; }); colorWrap.appendChild(addBtn); } }
     rebuildPalette(); d.appendChild(colorWrap);
@@ -873,7 +896,9 @@ function renderLayout(){
 }
 $("addBoxBtn").addEventListener("click", ()=>{
   if(!currentJson||!currentJson.compositional_deconstruction) return;
-  const els=currentJson.compositional_deconstruction.elements; const newEl={type:"obj", bbox:[300,300,700,700], desc:"new element"}; els.push(newEl); activeBbox=els.length-1; editArea.value=JSON.stringify(currentJson,null,2); renderLayout(); renderJsonPreview(); isDirty=true; setBadge("valid","✓ Valid JSON (unsaved) — element added");
+  const els=currentJson.compositional_deconstruction.elements; const newEl={type:"obj", bbox:[300,300,700,700], desc:"new element"}; els.push(newEl); activeBbox=els.length-1; editArea.value=JSON.stringify(currentJson,null,2); renderLayout(); renderElementList(); renderStructuredEditor(); renderJsonPreview(); isDirty=true; setBadge("valid","✓ Valid JSON (unsaved) — element added");
+  // expand newly added
+  setTimeout(()=>{ const elList=document.getElementById("elementList"); const lastRow=elList?.lastElementChild; if(lastRow) { lastRow.querySelector(".el-details").style.display="flex"; lastRow.querySelector(".el-toggle").textContent="▾"; }}, 50);
 });
 
 // ── settings page ────────────────────────────────────────────────────────
