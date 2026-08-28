@@ -412,8 +412,8 @@ let queue = Promise.resolve();
 function enqueue(job) { const run = queue.then(job, job); queue = run.catch(() => {}); return run; }
 
 // ── startup ───────────────────────────────────────────────────────────────────
-const { modelFile, mmprojFile } = resolveModels();
-const serverBin = resolveLlamaServer();
+let { modelFile, mmprojFile } = resolveModels();
+let serverBin = resolveLlamaServer();
 if (modelFile) console.log(`Model:  ${path.basename(modelFile)}`); else console.log("Model: (none) — generation will be unavailable until models are placed in app/models/");
 if (serverBin) console.log(`Binary: ${serverBin}`); else console.log("Binary: (none) — generation unavailable; dataset editing still works. Run app/scripts/download-llama.mjs to fetch llama-server.");
 
@@ -423,6 +423,27 @@ if (serverBin && modelFile) {
   catch (e) { console.error("Failed to start llama-server:", e.message, "— continuing without generation."); }
 } else {
   console.log("Skipping llama-server startup (missing binary or model). UI will still run for dataset editing.");
+}
+
+async function restartLlamaServer() {
+  const next = resolveModels();
+  modelFile = next.modelFile;
+  mmprojFile = next.mmprojFile;
+  serverBin = resolveLlamaServer();
+  if (llamaProc) {
+    try { llamaProc.kill(); } catch {}
+    await new Promise(r => setTimeout(r, 1500));
+    llamaProc = null;
+  }
+  if (!serverBin) return { ok: false, error: "llama-server binary not found in app/bin — run app/scripts/download-llama.mjs" };
+  if (!modelFile) return { ok: false, error: "no model .gguf found in app/models — upload a model first" };
+  try {
+    llamaProc = await startLlamaServer(serverBin, modelFile, mmprojFile);
+    console.log("llama-server restarted.");
+    return { ok: true, model: path.basename(modelFile), mmproj: mmprojFile ? path.basename(mmprojFile) : null, vision: !!mmprojFile };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
 }
 
 // ── HTTP server ───────────────────────────────────────────────────────────────
@@ -496,6 +517,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === "POST" && url.pathname === "/api/llama/restart") {
+    const r = await restartLlamaServer();
+    if (r.ok) sendJson(res, 200, { ok: true, ...r });
+    else sendJson(res, 500, { ok: false, ...r });
+    return;
+  }
+
   // ── models upload / download (save to app/models) ───────────────────
   if (req.method === "POST" && url.pathname === "/api/models/upload") {
     const rawFilename = req.headers["x-filename"] || req.headers["x-filename".toLowerCase?.()] || "model.gguf";
@@ -509,7 +537,9 @@ const server = http.createServer(async (req, res) => {
       const buf = await readRaw(req);
       if (!buf.length) { sendJson(res, 400, { error: "empty file" }); return; }
       fs.writeFileSync(dest, buf);
-      sendJson(res, 200, { ok: true, filename, size: buf.length, path: dest });
+      // auto restart / start llama-server with new model
+      const restart = await restartLlamaServer();
+      sendJson(res, 200, { ok: true, filename, size: buf.length, path: dest, restart });
     } catch (err) { sendJson(res, 500, { error: String(err.message) }); }
     return;
   }
@@ -548,6 +578,10 @@ const server = http.createServer(async (req, res) => {
       out.end();
       await new Promise((res2, rej) => { out.on("finish", res2); out.on("error", rej); });
       emit({ type: "done", filename, size: received, path: dest });
+      emit({ type: "progress", message: "Restarting llama-server with new model..." });
+      const rr = await restartLlamaServer();
+      if (rr.ok) emit({ type: "restart", ok: true, model: rr.model, mmproj: rr.mmproj });
+      else emit({ type: "restart", ok: false, error: rr.error });
     } catch (err) {
       try { fs.unlinkSync(dest); } catch {}
       emit({ type: "error", message: String(err.message) });

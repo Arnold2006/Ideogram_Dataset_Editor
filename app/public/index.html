@@ -263,6 +263,8 @@
           <small>Default 32768. Larger needs more VRAM. Requires restart.</small>
         </div>
         <button id="modelsRefresh" class="btn btn-ghost btn-sm" style="width:fit-content">↻ Refresh model list</button>
+        <button id="llamaRestartBtn" class="btn btn-ghost btn-sm" style="width:fit-content">↻ Restart / Start llama-server</button>
+        <div id="llamaStatus" style="font-size:12px;color:var(--muted)"></div>
       </div>
       <div id="settingsPrompts" class="settings-tab-pane">
         <div class="settings-field">
@@ -810,8 +812,12 @@ modelUploadBtn.addEventListener("click", async ()=>{
     const r = await fetch("/api/models/upload", { method:"POST", headers:{"X-Filename": f.name}, body: f });
     const j = await r.json().catch(()=> ({}));
     if (!r.ok) throw new Error(j.error || r.statusText);
-    modelLoadProgress.textContent="Saved to app/models/"+j.filename+" ✓";
+    let msg="Saved to app/models/"+j.filename+" ✓";
+    if (j.restart) msg+= j.restart.ok ? " — llama-server restarted with "+(j.restart.model||"model") : " — restart failed: "+j.restart.error;
+    else msg+=" — restarting llama-server…";
+    modelLoadProgress.textContent=msg;
     await loadSettings();
+    if (j.restart && !j.restart.ok) modelLoadProgress.textContent+=" (restart manually if needed)";
   } catch(e) { modelLoadProgress.textContent="Upload failed: "+e.message; }
   finally { modelUploadBtn.disabled=false; modelDownloadBtn.disabled=false; }
 });
@@ -823,11 +829,10 @@ modelDownloadBtn.addEventListener("click", async ()=>{
   modelUploadBtn.disabled=true; modelDownloadBtn.disabled=true;
   try {
     const r = await fetch("/api/models/download", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ url }) });
-    // server streams NDJSON progress if available, else JSON
     const ct = r.headers.get("content-type") || "";
     if (ct.includes("x-ndjson")) {
       const reader = r.body.getReader(); const dec = new TextDecoder(); let buf="";
-      while(true){ const {done,value}=await reader.read(); if(done) break; buf+=dec.decode(value,{stream:true}); const lines=buf.split("\n"); buf=lines.pop(); for(const line of lines){ if(!line.trim()) continue; try{ const ev=JSON.parse(line); if(ev.type==="progress") modelLoadProgress.textContent=ev.message; else if(ev.type==="done") modelLoadProgress.textContent="Saved to "+ev.filename+" ✓"; else if(ev.type==="error") throw new Error(ev.message); }catch(e){} } }
+      while(true){ const {done,value}=await reader.read(); if(done) break; buf+=dec.decode(value,{stream:true}); const lines=buf.split("\n"); buf=lines.pop(); for(const line of lines){ if(!line.trim()) continue; try{ const ev=JSON.parse(line); if(ev.type==="progress") modelLoadProgress.textContent=ev.message; else if(ev.type==="done") modelLoadProgress.textContent="Saved to "+ev.filename+" ✓ — restarting llama-server…"; else if(ev.type==="restart") modelLoadProgress.textContent+= ev.ok ? " restarted with "+(ev.model||"model")+" ✓" : " restart failed: "+ev.error; else if(ev.type==="error") throw new Error(ev.message); }catch(e){} } }
       await loadSettings();
     } else {
       const j = await r.json();
@@ -837,6 +842,19 @@ modelDownloadBtn.addEventListener("click", async ()=>{
     }
   } catch(e) { modelLoadProgress.textContent="Download failed: "+e.message; }
   finally { modelUploadBtn.disabled=false; modelDownloadBtn.disabled=false; }
+});
+const llamaRestartBtn = $("llamaRestartBtn"), llamaStatus = $("llamaStatus");
+llamaRestartBtn.addEventListener("click", async ()=>{
+  llamaStatus.textContent="Restarting…";
+  llamaRestartBtn.disabled=true;
+  try {
+    const r = await fetch("/api/llama/restart", { method:"POST" });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    llamaStatus.textContent="Restarted ✓ "+(j.model||"")+(j.mmproj?" + "+j.mmproj:"");
+    await loadSettings();
+  } catch(e) { llamaStatus.textContent="Restart failed: "+e.message; }
+  finally { llamaRestartBtn.disabled=false; setTimeout(()=> llamaStatus.textContent="", 4000); }
 });
 
 // hint
