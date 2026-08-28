@@ -355,6 +355,31 @@ if(folderInput) folderInput.addEventListener("keydown", e=>{ if(e.key==="Enter")
 if(refreshBtn) refreshBtn.addEventListener("click", loadFolder);
 if(generateAllBtn) generateAllBtn.addEventListener("click", generateMissing);
 
+function handleThumbClick(idx){
+  console.log("thumb click", idx, serverImages[idx]?.file, "current before", current);
+  if(idx < 0 || idx >= dataset.length){
+    const it=serverImages[idx];
+    if(it){
+      const dsIdx=dataset.findIndex(d=>d.imgName===it.file);
+      if(dsIdx!==-1) idx=dsIdx;
+    }
+  }
+  if(idx >=0 && idx < dataset.length){
+    // bypass save for instant switch, save in background
+    if(modified.has(current)){
+      saveCurrentJson().catch(()=>{});
+      modified.delete(current);
+    }
+    current=idx;
+    renderEntry();
+    document.querySelectorAll(".thumb").forEach((el,i)=>{
+      const it2=serverImages[i];
+      el.classList.toggle("selected", dataset[current] && dataset[current].imgName===it2.file);
+    });
+  } else {
+    selectImage(idx);
+  }
+}
 function renderGrid(){
   const g=document.getElementById("grid");
   if(!g) return;
@@ -363,27 +388,21 @@ function renderGrid(){
   serverImages.forEach((it,idx)=>{
     const card=document.createElement("div");
     card.className="thumb"; card.dataset.idx=idx;
+    card.style.cursor="pointer";
+    card.style.pointerEvents="auto";
     const imgUrl = it.absPath ? "/api/image?path="+encodeURIComponent(it.absPath) : URL.createObjectURL(it.fileObj);
     const hasCap=!!it.captionFile;
-    card.innerHTML=`<img src="${imgUrl}" alt="" loading="lazy"><div class="thumb-foot"><span class="thumb-name">${it.file}</span><span class="thumb-badge ${hasCap?'has':'none'}">${hasCap?'✓ '+it.captionFile:'no caption'}</span></div>`;
-    card.addEventListener("click", async ()=>{
-      console.log("thumb click", idx, it.file, "dataset.len", dataset.length);
-      // dataset and serverImages are parallel after Load, so idx is correct
-      if(dataset[idx] && dataset[idx].imgName===it.file){
-        await goTo(idx);
-      } else {
-        const dsIdx=dataset.findIndex(d=>d.imgName===it.file);
-        if(dsIdx!==-1){ await goTo(dsIdx); }
-        else { await selectImage(idx); }
-      }
-      // re-highlight after navigation
-      document.querySelectorAll(".thumb").forEach((el,i)=>{
-        const it2=serverImages[i];
-        el.classList.toggle("selected", dataset[current] && dataset[current].imgName===it2.file);
-      });
-    });
+    card.innerHTML=`<img src="${imgUrl}" alt="" loading="lazy" style="pointer-events:none"><div class="thumb-foot" style="pointer-events:none"><span class="thumb-name">${it.file}</span><span class="thumb-badge ${hasCap?'has':'none'}">${hasCap?'✓ '+it.captionFile:'no caption'}</span></div>`;
+    card.onclick=()=> handleThumbClick(idx);
     g.appendChild(card);
   });
+  // delegation fallback
+  g.onclick=(e)=>{
+    const card=e.target.closest(".thumb");
+    if(!card) return;
+    const idx=Number(card.dataset.idx);
+    if(!isNaN(idx)) handleThumbClick(idx);
+  };
   // highlight
   document.querySelectorAll(".thumb").forEach((el,i)=>{
     const it=serverImages[i];
