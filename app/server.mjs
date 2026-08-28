@@ -394,6 +394,19 @@ function readBody(req) {
     req.on("end", () => resolve(body)); req.on("error", reject);
   });
 }
+function readRaw(req, limit = 8_000_000_000) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0;
+    req.on("data", (c) => {
+      chunks.push(c);
+      total += c.length;
+      if (total > limit) reject(new Error("upload too large"));
+    });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
 function sendJson(res, status, value) { res.writeHead(status, { "Content-Type": "application/json" }); res.end(JSON.stringify(value)); }
 let queue = Promise.resolve();
 function enqueue(job) { const run = queue.then(job, job); queue = run.catch(() => {}); return run; }
@@ -480,6 +493,66 @@ const server = http.createServer(async (req, res) => {
       }
       sendJson(res, 200, { ok: true, settings: saved, defaults: DEFAULT_PROMPTS });
     } catch (err) { sendJson(res, 500, { error: String(err.message) }); }
+    return;
+  }
+
+  // ── models upload / download (save to app/models) ───────────────────
+  if (req.method === "POST" && url.pathname === "/api/models/upload") {
+    const rawFilename = req.headers["x-filename"] || req.headers["x-filename".toLowerCase?.()] || "model.gguf";
+    const filename = path.basename(String(rawFilename).trim());
+    if (!filename.toLowerCase().endsWith(".gguf")) { sendJson(res, 400, { error: "filename must end with .gguf" }); return; }
+    if (filename.includes("..")) { sendJson(res, 400, { error: "invalid filename" }); return; }
+    const modelsDir = path.join(__dirname, "models");
+    try { fs.mkdirSync(modelsDir, { recursive: true }); } catch {}
+    const dest = path.join(modelsDir, filename);
+    try {
+      const buf = await readRaw(req);
+      if (!buf.length) { sendJson(res, 400, { error: "empty file" }); return; }
+      fs.writeFileSync(dest, buf);
+      sendJson(res, 200, { ok: true, filename, size: buf.length, path: dest });
+    } catch (err) { sendJson(res, 500, { error: String(err.message) }); }
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/models/download") {
+    let body; try { body = JSON.parse(await readBody(req)); } catch { sendJson(res, 400, { error: "invalid JSON" }); return; }
+    const urlStr = typeof body.url === "string" ? body.url.trim() : "";
+    if (!urlStr || !/^https?:\/\//i.test(urlStr)) { sendJson(res, 400, { error: "provide valid http(s) url to .gguf" }); return; }
+    let filename = typeof body.filename === "string" && body.filename.trim() ? path.basename(body.filename.trim()) : path.basename(new URL(urlStr).pathname) || "model.gguf";
+    if (!filename.toLowerCase().endsWith(".gguf")) filename += ".gguf";
+    if (filename.includes("..")) filename = "model.gguf";
+    const modelsDir = path.join(__dirname, "models");
+    try { fs.mkdirSync(modelsDir, { recursive: true }); } catch {}
+    const dest = path.join(modelsDir, filename);
+    res.writeHead(200, { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-cache" });
+    const emit = (ev) => res.write(JSON.stringify(ev) + "\n");
+    try {
+      emit({ type: "progress", message: "Downloading " + filename + " ..." });
+      const r = await fetch(urlStr);
+      if (!r.ok) throw new Error(`fetch ${r.status} ${r.statusText}`);
+      const total = Number(r.headers.get("content-length") || 0);
+      const reader = r.body.getReader();
+      const out = fs.createWriteStream(dest);
+      let received = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        received += value.length;
+        out.write(value);
+        if (total) {
+          const pct = ((received / total) * 100).toFixed(1);
+          emit({ type: "progress", message: `Downloading ${filename}: ${(received/1024/1024).toFixed(1)} / ${(total/1024/1024).toFixed(1)} MB (${pct}%)` });
+        } else {
+          emit({ type: "progress", message: `Downloading ${filename}: ${(received/1024/1024).toFixed(1)} MB` });
+        }
+      }
+      out.end();
+      await new Promise((res2, rej) => { out.on("finish", res2); out.on("error", rej); });
+      emit({ type: "done", filename, size: received, path: dest });
+    } catch (err) {
+      try { fs.unlinkSync(dest); } catch {}
+      emit({ type: "error", message: String(err.message) });
+    }
+    res.end();
     return;
   }
 

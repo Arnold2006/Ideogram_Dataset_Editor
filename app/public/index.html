@@ -47,16 +47,15 @@
   .ar-label { font-size: 11px; color: var(--muted); flex-shrink: 0; }
   .ar-btn { font: 12px/1 inherit; color: var(--muted); background: transparent; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; cursor: pointer; flex-shrink: 0; white-space: nowrap; }
   .ar-btn.active { color: var(--accent-fg); background: var(--accent); border-color: var(--accent); }
-  /* grid — thumbnails halved (prev 1/1 full width → 70px half) */
-  .grid-wrap { flex: 1; overflow-y: auto; padding: 8px; min-height: 0; }
-  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-  @media (max-width: 1100px) { .grid { grid-template-columns: repeat(3, 1fr); } }
-  @media (max-width: 700px) { .grid { grid-template-columns: repeat(2, 1fr); } }
-  .thumb { position: relative; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--card); cursor: pointer; transition: border-color 0.12s, box-shadow 0.12s; display: flex; flex-direction: column; }
+  /* grid — 200x200px thumbs, 3 columns */
+  .grid-wrap { flex: 1; overflow-y: auto; padding: 12px; min-height: 0; }
+  .grid { display: grid; grid-template-columns: repeat(3, 200px); gap: 12px; justify-content: start; }
+  @media (max-width: 700px) { .grid { grid-template-columns: repeat(2, 200px); } }
+  .thumb { width: 200px; position: relative; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--card); cursor: pointer; transition: border-color 0.12s, box-shadow 0.12s; display: flex; flex-direction: column; }
   .thumb:hover { border-color: var(--muted); }
   .thumb.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
-  .thumb img { width: 100%; height: 72px; object-fit: cover; display: block; background: #111827; }
-  .thumb-foot { padding: 4px 6px; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .thumb img { width: 200px; height: 200px; object-fit: cover; display: block; background: #111827; flex-shrink: 0; }
+  .thumb-foot { padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .thumb-name { font-size: 11px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .thumb-badge { font-size: 10px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); display: inline-flex; align-items: center; gap: 4px; width: fit-content; }
   .thumb-badge.has { color: var(--green); background: var(--green-bg); border-color: transparent; }
@@ -237,6 +236,17 @@
           <label>Detected models in app/models</label>
           <div id="modelsList" class="models-list">loading…</div>
           <small>Place .gguf files in app/models and click Refresh. Requires restart to reload llama-server.</small>
+        </div>
+        <div class="settings-field" style="border:1px solid var(--border); border-radius:8px; padding:10px; background:var(--code-bg)">
+          <label>Load model to app/models</label>
+          <input type="file" id="modelUploadInput" accept=".gguf" style="font-size:13px">
+          <button id="modelUploadBtn" class="btn btn-primary btn-sm" style="margin-top:6px">Upload selected .gguf to app/models</button>
+          <small>Select a local .gguf file — it will be saved to app/models and appear above after upload.</small>
+          <div style="height:1px;background:var(--border);margin:8px 0"></div>
+          <input id="modelUrlInput" placeholder="https://huggingface.co/.../model.gguf  or  https://...">
+          <button id="modelDownloadBtn" class="btn btn-ghost btn-sm" style="margin-top:6px">Download URL to app/models</button>
+          <small>Downloads directly on the server. Large files may take minutes. Filename is taken from URL.</small>
+          <div id="modelLoadProgress" style="font-size:12px;color:var(--muted);margin-top:6px;display:none"></div>
         </div>
         <div class="settings-field">
           <label for="modelPathInput">Model file (auto = first .gguf)</label>
@@ -788,6 +798,46 @@ document.querySelectorAll("[data-reset]").forEach(btn=> btn.addEventListener("cl
     settingsMsg.textContent="reset "+key+" ✓";
   } catch(e) { settingsMsg.textContent="reset failed: "+e.message; }
 }));
+// ── load model to app/models ─────────────────────────────────────────────
+const modelUploadInput = $("modelUploadInput"), modelUploadBtn = $("modelUploadBtn"), modelUrlInput = $("modelUrlInput"), modelDownloadBtn = $("modelDownloadBtn"), modelLoadProgress = $("modelLoadProgress");
+modelUploadBtn.addEventListener("click", async ()=>{
+  const f = modelUploadInput.files[0];
+  if (!f) { alert("Select a .gguf file first"); return; }
+  if (!f.name.toLowerCase().endsWith(".gguf")) { alert("Please select a .gguf file"); return; }
+  modelLoadProgress.style.display="block"; modelLoadProgress.textContent="Uploading "+f.name+" ("+(f.size/1024/1024).toFixed(1)+" MB)…";
+  modelUploadBtn.disabled=true; modelDownloadBtn.disabled=true;
+  try {
+    const r = await fetch("/api/models/upload", { method:"POST", headers:{"X-Filename": f.name}, body: f });
+    const j = await r.json().catch(()=> ({}));
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    modelLoadProgress.textContent="Saved to app/models/"+j.filename+" ✓";
+    await loadSettings();
+  } catch(e) { modelLoadProgress.textContent="Upload failed: "+e.message; }
+  finally { modelUploadBtn.disabled=false; modelDownloadBtn.disabled=false; }
+});
+modelDownloadBtn.addEventListener("click", async ()=>{
+  const url = modelUrlInput.value.trim();
+  if (!url) { alert("Enter a URL to a .gguf file"); return; }
+  if (!url.toLowerCase().includes(".gguf")) { if (!confirm("URL does not contain .gguf — continue?")) return; }
+  modelLoadProgress.style.display="block"; modelLoadProgress.textContent="Downloading from URL… (check server console for progress)";
+  modelUploadBtn.disabled=true; modelDownloadBtn.disabled=true;
+  try {
+    const r = await fetch("/api/models/download", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ url }) });
+    // server streams NDJSON progress if available, else JSON
+    const ct = r.headers.get("content-type") || "";
+    if (ct.includes("x-ndjson")) {
+      const reader = r.body.getReader(); const dec = new TextDecoder(); let buf="";
+      while(true){ const {done,value}=await reader.read(); if(done) break; buf+=dec.decode(value,{stream:true}); const lines=buf.split("\n"); buf=lines.pop(); for(const line of lines){ if(!line.trim()) continue; try{ const ev=JSON.parse(line); if(ev.type==="progress") modelLoadProgress.textContent=ev.message; else if(ev.type==="done") modelLoadProgress.textContent="Saved to "+ev.filename+" ✓"; else if(ev.type==="error") throw new Error(ev.message); }catch(e){} } }
+      await loadSettings();
+    } else {
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.statusText);
+      modelLoadProgress.textContent="Saved to app/models/"+j.filename+" ✓";
+      await loadSettings();
+    }
+  } catch(e) { modelLoadProgress.textContent="Download failed: "+e.message; }
+  finally { modelUploadBtn.disabled=false; modelDownloadBtn.disabled=false; }
+});
 
 // hint
 plainHint.style.display="";
