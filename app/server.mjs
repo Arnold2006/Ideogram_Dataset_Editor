@@ -425,11 +425,38 @@ if (serverBin && modelFile) {
   console.log("Skipping llama-server startup (missing binary or model). UI will still run for dataset editing.");
 }
 
+async function ensureLlamaBinary() {
+  if (resolveLlamaServer()) return true;
+  const dl = path.join(__dirname, "scripts", "download-llama.mjs");
+  if (!fs.existsSync(dl)) return false;
+  console.log("llama-server missing — auto-downloading via scripts/download-llama.mjs …");
+  try {
+    const proc = spawn(process.execPath, [dl], { stdio: ["ignore", "pipe", "pipe"] });
+    proc.stdout?.on("data", d => process.stdout.write(d));
+    proc.stderr?.on("data", d => process.stderr.write(d));
+    const code = await new Promise((resolve) => { proc.on("close", resolve); proc.on("error", () => resolve(1)); });
+    if (code !== 0) { console.error("download-llama.mjs failed with code", code); return false; }
+    return !!resolveLlamaServer();
+  } catch (e) {
+    console.error("ensureLlamaBinary failed:", e);
+    return false;
+  }
+}
+
 async function restartLlamaServer() {
   const next = resolveModels();
   modelFile = next.modelFile;
   mmprojFile = next.mmprojFile;
   serverBin = resolveLlamaServer();
+  if (!serverBin) {
+    const ok = await ensureLlamaBinary();
+    if (ok) {
+      serverBin = resolveLlamaServer();
+      console.log("llama-server binary downloaded:", serverBin);
+    } else {
+      return { ok: false, error: "llama-server binary not found in app/bin — auto-download failed, run app/scripts/download-llama.mjs manually" };
+    }
+  }
   if (llamaProc) {
     try { llamaProc.kill(); } catch {}
     await new Promise(r => setTimeout(r, 1500));
